@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Battle Bots</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Main Menu -->
+        <div id="screen-menu" class="screen active">
+            <div class="menu-container">
+                <h1 class="game-title">BATTLE<span>BOTS</span></h1>
+                <p class="subtitle">Design. Build. Fight.</p>
+                <div class="menu-buttons">
+                    <button class="btn btn-primary" onclick="Game.showScreen('workshop')">Workshop</button>
+                    <button class="btn btn-secondary" onclick="Game.showScreen('arena-select')">Battle</button>
+                    <button class="btn btn-tertiary" onclick="Game.showScreen('hangar')">Hangar</button>
+                </div>
+                <div class="credits-display">
+                    <span class="credits-icon">⚡</span>
+                    <span id="menu-credits">1000</span> Credits
+                </div>
+            </div>
+        </div>
+
+        <!-- Hangar (saved robots) -->
+        <div id="screen-hangar" class="screen">
+            <div class="screen-header">
+                <button class="btn-back" onclick="Game.showScreen('menu')">← Back</button>
+                <h2>Hangar</h2>
+                <button class="btn btn-small btn-primary" onclick="Game.createNewRobot()">+ New Robot</button>
+            </div>
+            <div id="hangar-list" class="hangar-list"></div>
+        </div>
+
+        <!-- Workshop -->
+        <div id="screen-workshop" class="screen">
+            <div class="screen-header">
+                <button class="btn-back" onclick="Game.showScreen('menu')">← Back</button>
+                <h2>Workshop</h2>
+                <div class="credits-display small">
+                    <span class="credits-icon">⚡</span>
+                    <span id="workshop-credits">1000</span>
+                </div>
+            </div>
+            <div class="workshop-layout">
+                <div class="robot-preview-panel">
+                    <div class="robot-name-edit">
+                        <input type="text" id="robot-name" value="MK-1" maxlength="16" spellcheck="false">
+                    </div>
+                    <canvas id="robot-canvas" width="280" height="320"></canvas>
+                    <div class="stat-bars" id="total-stats"></div>
+                </div>
+                <div class="parts-panel">
+                    <div class="part-categories">
+                        <button class="part-tab active" data-category="head" onclick="Workshop.selectCategory('head')">Head</button>
+                        <button class="part-tab" data-category="torso" onclick="Workshop.selectCategory('torso')">Torso</button>
+                        <button class="part-tab" data-category="arms" onclick="Workshop.selectCategory('arms')">Arms</button>
+                        <button class="part-tab" data-category="legs" onclick="Workshop.selectCategory('legs')">Legs</button>
+                        <button class="part-tab" data-category="weapon" onclick="Workshop.selectCategory('weapon')">Weapon</button>
+                        <button class="part-tab" data-category="special" onclick="Workshop.selectCategory('special')">Special</button>
+                    </div>
+                    <div id="parts-list" class="parts-list"></div>
+                </div>
+            </div>
+            <div class="workshop-footer">
+                <button class="btn btn-primary" onclick="Workshop.saveRobot()">Save Robot</button>
+            </div>
+        </div>
+
+        <!-- Arena Select -->
+        <div id="screen-arena-select" class="screen">
+            <div class="screen-header">
+                <button class="btn-back" onclick="Game.showScreen('menu')">← Back</button>
+                <h2>Select Arena</h2>
+            </div>
+            <div id="arena-list" class="arena-list"></div>
+        </div>
+
+        <!-- Battle -->
+        <div id="screen-battle" class="screen">
+            <div class="battle-hud">
+                <div class="fighter-hud left">
+                    <div class="fighter-name" id="player-name">MK-1</div>
+                    <div class="hp-bar-container">
+                        <div class="hp-bar" id="player-hp-bar"></div>
+                        <span class="hp-text" id="player-hp-text">100/100</span>
+                    </div>
+                    <div class="energy-bar-container">
+                        <div class="energy-bar" id="player-energy-bar"></div>
+                        <span class="energy-text" id="player-energy-text">50/50</span>
+                    </div>
+                </div>
+                <div class="battle-round" id="battle-round">Round 1</div>
+                <div class="fighter-hud right">
+                    <div class="fighter-name" id="enemy-name">Enemy</div>
+                    <div class="hp-bar-container">
+                        <div class="hp-bar enemy" id="enemy-hp-bar"></div>
+                        <span class="hp-text" id="enemy-hp-text">100/100</span>
+                    </div>
+                    <div class="energy-bar-container">
+                        <div class="energy-bar enemy" id="enemy-energy-bar"></div>
+                        <span class="energy-text" id="enemy-energy-text">50/50</span>
+                    </div>
+                </div>
+            </div>
+            <div class="battle-arena">
+                <canvas id="battle-canvas" width="600" height="300"></canvas>
+            </div>
+            <div class="battle-log" id="battle-log"></div>
+            <div class="battle-actions" id="battle-actions">
+                <button class="btn btn-action attack" onclick="Battle.doAction('attack')">⚔️ Attack</button>
+                <button class="btn btn-action defend" onclick="Battle.doAction('defend')">🛡️ Defend</button>
+                <button class="btn btn-action special" onclick="Battle.doAction('special')">✨ Special</button>
+                <button class="btn btn-action repair" onclick="Battle.doAction('repair')">🔧 Repair</button>
+            </div>
+        </div>
+
+        <!-- Battle Result -->
+        <div id="screen-result" class="screen">
+            <div class="result-container">
+                <h1 id="result-title" class="result-title">Victory!</h1>
+                <div id="result-details" class="result-details"></div>
+                <div class="result-buttons">
+                    <button class="btn btn-primary" onclick="Game.showScreen('menu')">Main Menu</button>
+                    <button class="btn btn-secondary" onclick="Game.rematch()">Rematch</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="robot-renderer.js"></script>
+    <script src="game.js"></script>
+</body>
+</html>
