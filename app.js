@@ -65,8 +65,8 @@ const Auth = {
 
         if (data.user) {
             State.user = data.user;
-            // Wait a moment for the trigger to create the profile
-            await new Promise(r => setTimeout(r, 500));
+            // Create profile directly (more reliable than trigger)
+            await this.ensureProfile(username);
             await this.loadProfile();
             this.checkHashRoute();
         }
@@ -94,6 +94,18 @@ const Auth = {
         State.user = null;
         State.profile = null;
         App.showScreen('auth');
+    },
+
+    async ensureProfile(username) {
+        // Check if profile already exists
+        const { data: existing } = await sb.from('profiles').select('id').eq('id', State.user.id).single();
+        if (existing) return;
+
+        // Create profile
+        await sb.from('profiles').insert({
+            id: State.user.id,
+            username: username
+        });
     },
 
     async loadProfile() {
