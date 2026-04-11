@@ -1,7 +1,16 @@
 -- ============================================
--- BATTLE BOTS — Database Setup
+-- BATTLE BOTS — Database Setup v2
 -- Run this in Supabase SQL Editor
 -- ============================================
+
+-- Clean up old tables if they exist
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS handle_new_user();
+DROP FUNCTION IF EXISTS join_match;
+DROP FUNCTION IF EXISTS resolve_rps;
+DROP TABLE IF EXISTS matches;
+DROP TABLE IF EXISTS robots;
+DROP TABLE IF EXISTS profiles;
 
 -- Profiles
 create table profiles (
@@ -13,33 +22,25 @@ create table profiles (
   created_at timestamptz default now()
 );
 
--- Robots
-create table robots (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid references profiles(id) on delete cascade not null,
-  name text not null default 'MK-1',
-  parts jsonb not null,
-  is_active boolean default false,
-  created_at timestamptz default now()
-);
-
--- Matches
+-- Matches (attack/defense system)
+-- Each round: player picks attack (high/mid/low) and defense (high/mid/low)
+-- choices format: [{"attack":"high","defense":"mid"}, ...]
 create table matches (
   id uuid primary key default gen_random_uuid(),
   challenger_id uuid references profiles(id) not null,
   challenger_robot jsonb not null,
-  challenger_choices text[] not null,
+  challenger_choices jsonb not null,
   opponent_id uuid references profiles(id),
   opponent_robot jsonb,
-  opponent_choices text[],
+  opponent_choices jsonb,
   status text default 'waiting' check (status in ('waiting', 'complete')),
   winner_id uuid references profiles(id),
+  round_results jsonb,
   created_at timestamptz default now()
 );
 
 -- Enable RLS
 alter table profiles enable row level security;
-alter table robots enable row level security;
 alter table matches enable row level security;
 
 -- Profiles policies
@@ -52,54 +53,44 @@ create policy "Users can update own profile"
 create policy "Users can insert own profile"
   on profiles for insert with check (auth.uid() = id);
 
--- Robots policies
-create policy "Users can view own robots"
-  on robots for select using (auth.uid() = user_id);
-
-create policy "Users can insert own robots"
-  on robots for insert with check (auth.uid() = user_id);
-
-create policy "Users can update own robots"
-  on robots for update using (auth.uid() = user_id);
-
-create policy "Users can delete own robots"
-  on robots for delete using (auth.uid() = user_id);
-
 -- Matches policies
--- Everyone can see completed matches (for replays/sharing)
 create policy "Anyone can view completed matches"
   on matches for select using (status = 'complete');
 
--- Participants can see their own matches
 create policy "Challengers can view own matches"
   on matches for select using (auth.uid() = challenger_id);
 
 create policy "Opponents can view joined matches"
   on matches for select using (auth.uid() = opponent_id);
 
--- Anyone authenticated can see waiting matches (to join via link)
--- But challenger_choices are protected by the join function
 create policy "Authenticated users can see waiting matches"
   on matches for select using (status = 'waiting' and auth.uid() is not null);
 
 create policy "Users can create matches"
   on matches for insert with check (auth.uid() = challenger_id);
 
--- Function to join a match (prevents seeing challenger choices)
+-- Function to join and resolve a match
 create or replace function join_match(
   p_match_id uuid,
-  p_choices text[],
+  p_choices jsonb,
   p_robot jsonb
 ) returns jsonb as $$
 declare
   v_match matches;
   v_result jsonb;
-  v_challenger_wins int := 0;
-  v_opponent_wins int := 0;
-  v_round_winner text;
+  v_round_results jsonb := '[]'::jsonb;
+  v_challenger_hits int := 0;
+  v_opponent_hits int := 0;
+  v_c_choice jsonb;
+  v_o_choice jsonb;
+  v_c_attack text;
+  v_c_defense text;
+  v_o_attack text;
+  v_o_defense text;
+  v_c_hit boolean;
+  v_o_hit boolean;
   v_winner_id uuid;
 begin
-  -- Get and lock the match
   select * into v_match from matches where id = p_match_id for update;
 
   if v_match is null then
@@ -114,27 +105,46 @@ begin
     raise exception 'Cannot play against yourself';
   end if;
 
-  if array_length(p_choices, 1) != 3 then
-    raise exception 'Must provide exactly 3 choices';
+  if jsonb_array_length(p_choices) != 3 then
+    raise exception 'Must provide exactly 3 rounds';
   end if;
 
-  -- Resolve rounds
-  for i in 1..3 loop
-    v_round_winner := resolve_rps(v_match.challenger_choices[i], p_choices[i]);
-    if v_round_winner = 'a' then
-      v_challenger_wins := v_challenger_wins + 1;
-    elsif v_round_winner = 'b' then
-      v_opponent_wins := v_opponent_wins + 1;
-    end if;
+  -- Resolve each round
+  for i in 0..2 loop
+    v_c_choice := v_match.challenger_choices->i;
+    v_o_choice := p_choices->i;
+
+    v_c_attack := v_c_choice->>'attack';
+    v_c_defense := v_c_choice->>'defense';
+    v_o_attack := v_o_choice->>'attack';
+    v_o_defense := v_o_choice->>'defense';
+
+    -- Challenger hits if their attack != opponent defense
+    v_c_hit := (v_c_attack != v_o_defense);
+    -- Opponent hits if their attack != challenger defense
+    v_o_hit := (v_o_attack != v_c_defense);
+
+    if v_c_hit then v_challenger_hits := v_challenger_hits + 1; end if;
+    if v_o_hit then v_opponent_hits := v_opponent_hits + 1; end if;
+
+    v_round_results := v_round_results || jsonb_build_object(
+      'round', i + 1,
+      'challenger_attack', v_c_attack,
+      'challenger_defense', v_c_defense,
+      'opponent_attack', v_o_attack,
+      'opponent_defense', v_o_defense,
+      'challenger_hit', v_c_hit,
+      'opponent_hit', v_o_hit
+    );
   end loop;
 
   -- Determine winner
-  if v_challenger_wins > v_opponent_wins then
+  if v_challenger_hits > v_opponent_hits then
     v_winner_id := v_match.challenger_id;
-  elsif v_opponent_wins > v_challenger_wins then
+  elsif v_opponent_hits > v_challenger_hits then
     v_winner_id := auth.uid();
   else
-    v_winner_id := null; -- draw
+    v_winner_id := null;
   end if;
 
   -- Update match
@@ -143,7 +153,8 @@ begin
     opponent_robot = p_robot,
     opponent_choices = p_choices,
     status = 'complete',
-    winner_id = v_winner_id
+    winner_id = v_winner_id,
+    round_results = v_round_results
   where id = p_match_id;
 
   -- Update win/loss counters
@@ -156,13 +167,11 @@ begin
     end if;
   end if;
 
-  -- Return full match result
   select jsonb_build_object(
     'match_id', p_match_id,
-    'challenger_choices', v_match.challenger_choices,
-    'opponent_choices', p_choices,
-    'challenger_wins', v_challenger_wins,
-    'opponent_wins', v_opponent_wins,
+    'round_results', v_round_results,
+    'challenger_hits', v_challenger_hits,
+    'opponent_hits', v_opponent_hits,
     'winner_id', v_winner_id
   ) into v_result;
 
@@ -170,29 +179,4 @@ begin
 end;
 $$ language plpgsql security definer;
 
--- Helper function for RPS resolution
-create or replace function resolve_rps(a text, b text) returns text as $$
-begin
-  if a = b then return 'draw'; end if;
-  if (a = 'rock' and b = 'scissors') or
-     (a = 'scissors' and b = 'paper') or
-     (a = 'paper' and b = 'rock') then
-    return 'a';
-  end if;
-  return 'b';
-end;
-$$ language plpgsql immutable;
-
--- Create profile automatically on signup
-create or replace function handle_new_user()
-returns trigger as $$
-begin
-  insert into profiles (id, username)
-  values (new.id, coalesce(new.raw_user_meta_data->>'username', 'Bot_' || substr(new.id::text, 1, 8)));
-  return new;
-end;
-$$ language plpgsql security definer;
-
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function handle_new_user();
+-- Profile creation is handled in app code (app.js)

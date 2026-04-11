@@ -37,16 +37,19 @@
         <!-- Main Menu -->
         <div id="screen-menu" class="screen">
             <div class="centered-container">
-                <h1 class="game-title">BATTLE<span>BOTS</span></h1>
-                <p class="subtitle">Build. Challenge. Destroy.</p>
+                <h1 class="game-title small">BATTLE<span>BOTS</span></h1>
                 <div class="user-badge">
-                    <span id="menu-username">Player</span>
+                    <div class="user-info-row">
+                        <span id="menu-username" class="username">Player</span>
+                        <span class="belt-badge" id="menu-belt">White Belt</span>
+                    </div>
                     <span class="user-record"><span id="menu-wins">0</span>W - <span id="menu-losses">0</span>L</span>
                 </div>
                 <div class="menu-buttons">
                     <button class="btn btn-primary" onclick="App.showScreen('workshop')">🔧 Workshop</button>
                     <button class="btn btn-accent" onclick="App.createChallenge()">⚔️ Create Challenge</button>
                     <button class="btn btn-secondary" onclick="App.showScreen('matches')">📋 My Matches</button>
+                    <button class="btn btn-secondary" onclick="App.showScreen('leaderboard')">🏆 Leaderboard</button>
                     <button class="btn btn-tertiary" onclick="Auth.logOut()">Log Out</button>
                 </div>
             </div>
@@ -55,8 +58,9 @@
         <!-- Workshop -->
         <div id="screen-workshop" class="screen">
             <div class="screen-header">
-                <button class="btn-back" onclick="App.showScreen('menu')">← Back</button>
+                <button class="btn-back" id="workshop-back-btn" onclick="App.showScreen('menu')">← Back</button>
                 <h2>Workshop</h2>
+                <div class="workshop-step-indicator" id="workshop-steps"></div>
             </div>
             <div class="workshop-layout">
                 <div class="robot-preview-panel">
@@ -79,48 +83,23 @@
                 </div>
             </div>
             <div class="workshop-footer">
-                <button class="btn btn-primary" onclick="Workshop.saveRobot()">Save Robot</button>
+                <button class="btn btn-primary" id="workshop-save-btn" onclick="Workshop.saveRobot()">Save Robot</button>
             </div>
         </div>
 
-        <!-- Choose Moves (RPS) -->
+        <!-- Choose Moves (Attack/Defense) -->
         <div id="screen-choose" class="screen">
-            <div class="centered-container">
-                <h2>Plan Your Attack</h2>
-                <p class="text-dim">Choose your move for each round. Best of 3!</p>
-                <div class="rounds-chooser">
-                    <div class="round-choice" id="round-1-choice">
-                        <h3>Round 1</h3>
-                        <div class="rps-buttons">
-                            <button class="rps-btn" onclick="ChooseMoves.pick(1,'rock')">🪨<span>Rock</span></button>
-                            <button class="rps-btn" onclick="ChooseMoves.pick(1,'paper')">📄<span>Paper</span></button>
-                            <button class="rps-btn" onclick="ChooseMoves.pick(1,'scissors')">✂️<span>Scissors</span></button>
-                        </div>
-                    </div>
-                    <div class="round-choice" id="round-2-choice">
-                        <h3>Round 2</h3>
-                        <div class="rps-buttons">
-                            <button class="rps-btn" onclick="ChooseMoves.pick(2,'rock')">🪨<span>Rock</span></button>
-                            <button class="rps-btn" onclick="ChooseMoves.pick(2,'paper')">📄<span>Paper</span></button>
-                            <button class="rps-btn" onclick="ChooseMoves.pick(2,'scissors')">✂️<span>Scissors</span></button>
-                        </div>
-                    </div>
-                    <div class="round-choice" id="round-3-choice">
-                        <h3>Round 3</h3>
-                        <div class="rps-buttons">
-                            <button class="rps-btn" onclick="ChooseMoves.pick(3,'rock')">🪨<span>Rock</span></button>
-                            <button class="rps-btn" onclick="ChooseMoves.pick(3,'paper')">📄<span>Paper</span></button>
-                            <button class="rps-btn" onclick="ChooseMoves.pick(3,'scissors')">✂️<span>Scissors</span></button>
-                        </div>
-                    </div>
-                </div>
+            <div class="choose-container">
+                <h2>Plan Your Strategy</h2>
+                <p class="text-dim">For each round, choose where to attack and where to defend.</p>
+                <div class="rounds-chooser" id="rounds-chooser"></div>
                 <button class="btn btn-primary btn-large" id="commit-btn" onclick="ChooseMoves.commit()" disabled>
-                    Lock In Choices
+                    Lock In Strategy
                 </button>
             </div>
         </div>
 
-        <!-- Challenge Created (share link) -->
+        <!-- Challenge Created -->
         <div id="screen-challenge-created" class="screen">
             <div class="centered-container">
                 <h2>Challenge Ready!</h2>
@@ -130,43 +109,22 @@
                     <button class="btn btn-primary btn-small" onclick="App.copyLink()">Copy</button>
                 </div>
                 <p id="copy-feedback" class="copy-feedback"></p>
+                <div class="share-options">
+                    <button class="btn btn-secondary" onclick="App.shareByEmail()">📧 Send by Email</button>
+                </div>
                 <p class="text-dim" style="margin-top: 24px;">Waiting for opponent to accept...</p>
-                <button class="btn btn-secondary" onclick="App.showScreen('menu')" style="margin-top: 16px;">Back to Menu</button>
+                <button class="btn btn-tertiary" onclick="App.showScreen('menu')" style="margin-top: 12px;">Back to Menu</button>
             </div>
         </div>
 
         <!-- Join Match -->
         <div id="screen-join" class="screen">
-            <div class="centered-container">
+            <div class="choose-container">
                 <h2 id="join-title">You've Been Challenged!</h2>
                 <div class="challenger-info" id="challenger-info"></div>
-                <p class="text-dim">Choose your moves to accept the challenge:</p>
-                <div class="rounds-chooser">
-                    <div class="round-choice" id="join-round-1-choice">
-                        <h3>Round 1</h3>
-                        <div class="rps-buttons">
-                            <button class="rps-btn" onclick="JoinMatch.pick(1,'rock')">🪨<span>Rock</span></button>
-                            <button class="rps-btn" onclick="JoinMatch.pick(1,'paper')">📄<span>Paper</span></button>
-                            <button class="rps-btn" onclick="JoinMatch.pick(1,'scissors')">✂️<span>Scissors</span></button>
-                        </div>
-                    </div>
-                    <div class="round-choice" id="join-round-2-choice">
-                        <h3>Round 2</h3>
-                        <div class="rps-buttons">
-                            <button class="rps-btn" onclick="JoinMatch.pick(2,'rock')">🪨<span>Rock</span></button>
-                            <button class="rps-btn" onclick="JoinMatch.pick(2,'paper')">📄<span>Paper</span></button>
-                            <button class="rps-btn" onclick="JoinMatch.pick(2,'scissors')">✂️<span>Scissors</span></button>
-                        </div>
-                    </div>
-                    <div class="round-choice" id="join-round-3-choice">
-                        <h3>Round 3</h3>
-                        <div class="rps-buttons">
-                            <button class="rps-btn" onclick="JoinMatch.pick(3,'rock')">🪨<span>Rock</span></button>
-                            <button class="rps-btn" onclick="JoinMatch.pick(3,'paper')">📄<span>Paper</span></button>
-                            <button class="rps-btn" onclick="JoinMatch.pick(3,'scissors')">✂️<span>Scissors</span></button>
-                        </div>
-                    </div>
-                </div>
+                <div class="h2h-record" id="h2h-record"></div>
+                <p class="text-dim">Choose your attack and defense for each round:</p>
+                <div class="rounds-chooser" id="join-rounds-chooser"></div>
                 <button class="btn btn-accent btn-large" id="join-commit-btn" onclick="JoinMatch.commit()" disabled>
                     ⚔️ Accept Challenge
                 </button>
@@ -180,6 +138,15 @@
                 <h2>My Matches</h2>
             </div>
             <div id="matches-list" class="matches-list"></div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div id="screen-leaderboard" class="screen">
+            <div class="screen-header">
+                <button class="btn-back" onclick="App.showScreen('menu')">← Back</button>
+                <h2>🏆 Leaderboard</h2>
+            </div>
+            <div id="leaderboard-list" class="leaderboard-list"></div>
         </div>
 
         <!-- Battle Playback -->

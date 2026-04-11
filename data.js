@@ -1,5 +1,5 @@
 // ============================================
-// BATTLE BOTS — Cosmetic Parts Data
+// BATTLE BOTS — Game Data v2
 // ============================================
 
 const PARTS = {
@@ -32,11 +32,11 @@ const PARTS = {
         { id: 'legs_gravity', name: 'Gravity Drives', icon: '🌀', description: 'Anti-gravity hover', tier: 4, sizeClass: 'medium' },
     ],
     weapon: [
-        { id: 'weapon_blaster', name: 'Pulse Blaster', icon: '🔫', description: 'Standard energy weapon', tier: 1, sizeClass: 'light' },
-        { id: 'weapon_scatter', name: 'Scatter Cannon', icon: '💥', description: 'Wide-spread kinetic', tier: 2, sizeClass: 'medium' },
-        { id: 'weapon_rail', name: 'Rail Driver', icon: '🎯', description: 'EM accelerator', tier: 2, sizeClass: 'medium' },
-        { id: 'weapon_plasma', name: 'Plasma Launcher', icon: '☄️', description: 'Superheated plasma', tier: 3, sizeClass: 'heavy' },
-        { id: 'weapon_annihilator', name: 'Annihilator', icon: '⚡', description: 'Disintegration beam', tier: 4, sizeClass: 'heavy' },
+        { id: 'weapon_blaster', name: 'Pulse Blaster', icon: '🔫', description: 'Energy projectiles', tier: 1, sizeClass: 'light', weaponType: 'energy' },
+        { id: 'weapon_scatter', name: 'Scatter Cannon', icon: '💥', description: 'Wide-spread kinetic', tier: 2, sizeClass: 'medium', weaponType: 'kinetic' },
+        { id: 'weapon_rail', name: 'Rail Driver', icon: '🎯', description: 'Precision beam', tier: 2, sizeClass: 'medium', weaponType: 'beam' },
+        { id: 'weapon_plasma', name: 'Plasma Launcher', icon: '☄️', description: 'Superheated plasma', tier: 3, sizeClass: 'heavy', weaponType: 'plasma' },
+        { id: 'weapon_annihilator', name: 'Annihilator', icon: '⚡', description: 'Disintegration beam', tier: 4, sizeClass: 'heavy', weaponType: 'beam' },
     ],
     special: [
         { id: 'special_none', name: 'None', icon: '➖', description: 'No module', tier: 0, sizeClass: 'light' },
@@ -48,42 +48,23 @@ const PARTS = {
     ]
 };
 
-// Map old part IDs to new ones for renderer compatibility
 const PART_ID_MAP = {
-    'head_scout': 'head_basic',
-    'head_sensor': 'head_sensor',
-    'head_helm': 'head_heavy',
-    'head_neural': 'head_ai',
-    'head_omega': 'head_omega',
-    'torso_light': 'torso_basic',
-    'torso_alloy': 'torso_balanced',
-    'torso_jugg': 'torso_tank',
-    'torso_reactor': 'torso_reactor',
-    'torso_apex': 'torso_omega',
-    'arms_util': 'arms_basic',
-    'arms_claws': 'arms_claws',
-    'arms_shield': 'arms_shield',
-    'arms_cannon': 'arms_cannon',
-    'arms_titan': 'arms_omega',
-    'legs_strider': 'legs_basic',
-    'legs_treads': 'legs_treads',
-    'legs_jet': 'legs_boost',
-    'legs_spider': 'legs_spider',
-    'legs_gravity': 'legs_omega',
-    'weapon_blaster': 'weapon_blaster',
-    'weapon_scatter': 'weapon_shotgun',
-    'weapon_rail': 'weapon_sniper',
-    'weapon_plasma': 'weapon_plasma',
+    'head_scout': 'head_basic', 'head_sensor': 'head_sensor', 'head_helm': 'head_heavy',
+    'head_neural': 'head_ai', 'head_omega': 'head_omega',
+    'torso_light': 'torso_basic', 'torso_alloy': 'torso_balanced', 'torso_jugg': 'torso_tank',
+    'torso_reactor': 'torso_reactor', 'torso_apex': 'torso_omega',
+    'arms_util': 'arms_basic', 'arms_claws': 'arms_claws', 'arms_shield': 'arms_shield',
+    'arms_cannon': 'arms_cannon', 'arms_titan': 'arms_omega',
+    'legs_strider': 'legs_basic', 'legs_treads': 'legs_treads', 'legs_jet': 'legs_boost',
+    'legs_spider': 'legs_spider', 'legs_gravity': 'legs_omega',
+    'weapon_blaster': 'weapon_blaster', 'weapon_scatter': 'weapon_shotgun',
+    'weapon_rail': 'weapon_sniper', 'weapon_plasma': 'weapon_plasma',
     'weapon_annihilator': 'weapon_omega',
-    'special_none': 'special_none',
-    'special_shield': 'special_shield',
-    'special_charge': 'special_overcharge',
-    'special_repair': 'special_repair',
-    'special_emp': 'special_emp',
-    'special_singularity': 'special_omega',
+    'special_none': 'special_none', 'special_shield': 'special_shield',
+    'special_charge': 'special_overcharge', 'special_repair': 'special_repair',
+    'special_emp': 'special_emp', 'special_singularity': 'special_omega',
 };
 
-// Get renderer-compatible part IDs
 function getRenderParts(parts) {
     const result = {};
     for (const [slot, id] of Object.entries(parts)) {
@@ -92,7 +73,6 @@ function getRenderParts(parts) {
     return result;
 }
 
-// Determine robot size class from parts
 function getRobotSizeClass(parts) {
     const sizes = { light: 0, medium: 0, heavy: 0 };
     for (const [slot, partId] of Object.entries(parts)) {
@@ -106,31 +86,39 @@ function getRobotSizeClass(parts) {
     return 'medium';
 }
 
-const TIER_COLORS = {
-    0: '#666',
-    1: '#aab',
-    2: '#00d4ff',
-    3: '#ff6b35',
-    4: '#ffd700'
-};
+function getWeaponType(parts) {
+    const wp = PARTS.weapon.find(w => w.id === parts.weapon);
+    return wp ? wp.weaponType : 'energy';
+}
+
+const TIER_COLORS = { 0: '#666', 1: '#aab', 2: '#00d4ff', 3: '#ff6b35', 4: '#ffd700' };
 
 const DEFAULT_PARTS = {
-    head: 'head_scout',
-    torso: 'torso_light',
-    arms: 'arms_util',
-    legs: 'legs_strider',
-    weapon: 'weapon_blaster',
-    special: 'special_none'
+    head: 'head_scout', torso: 'torso_light', arms: 'arms_util',
+    legs: 'legs_strider', weapon: 'weapon_blaster', special: 'special_none'
 };
 
-const RPS_ICONS = {
-    rock: '🪨',
-    paper: '📄',
-    scissors: '✂️'
-};
+const POSITIONS = ['high', 'mid', 'low'];
+const POSITION_ICONS = { high: '⬆️', mid: '➡️', low: '⬇️' };
+const POSITION_LABELS = { high: 'HIGH', mid: 'MID', low: 'LOW' };
 
-const RPS_NAMES = {
-    rock: 'ROCK',
-    paper: 'PAPER',
-    scissors: 'SCISSORS'
-};
+// Belt system
+const BELTS = [
+    { name: 'White Belt', minWins: 0, color: '#e0e0e0', bg: 'rgba(224,224,224,0.15)' },
+    { name: 'Yellow Belt', minWins: 3, color: '#ffd600', bg: 'rgba(255,214,0,0.15)' },
+    { name: 'Orange Belt', minWins: 7, color: '#ff9100', bg: 'rgba(255,145,0,0.15)' },
+    { name: 'Green Belt', minWins: 15, color: '#00e676', bg: 'rgba(0,230,118,0.15)' },
+    { name: 'Blue Belt', minWins: 25, color: '#448aff', bg: 'rgba(68,138,255,0.15)' },
+    { name: 'Purple Belt', minWins: 40, color: '#b388ff', bg: 'rgba(179,136,255,0.15)' },
+    { name: 'Brown Belt', minWins: 60, color: '#8d6e63', bg: 'rgba(141,110,99,0.15)' },
+    { name: 'Red Belt', minWins: 85, color: '#ff1744', bg: 'rgba(255,23,68,0.15)' },
+    { name: 'Black Belt', minWins: 100, color: '#263238', bg: 'rgba(38,50,56,0.4)' },
+];
+
+function getBelt(wins) {
+    let belt = BELTS[0];
+    for (const b of BELTS) {
+        if (wins >= b.minWins) belt = b;
+    }
+    return belt;
+}

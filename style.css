@@ -260,28 +260,80 @@ body {
     flex-shrink: 0;
 }
 
-/* RPS Chooser */
+/* Attack/Defense Chooser */
+.choose-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 20px;
+    gap: 16px;
+    overflow-y: auto;
+    height: 100%;
+}
 .rounds-chooser {
     width: 100%;
-    max-width: 400px;
+    max-width: 500px;
     display: flex;
     flex-direction: column;
     gap: 20px;
-    margin-top: 16px;
 }
-.round-choice h3 {
+.round-block {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+}
+.round-block h3 {
     text-align: center;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--text-dim);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     text-transform: uppercase;
     letter-spacing: 2px;
 }
-.rps-buttons {
+.attack-defense-row {
     display: flex;
-    gap: 12px;
-    justify-content: center;
+    gap: 16px;
 }
+.choice-group {
+    flex: 1;
+}
+.choice-group label {
+    display: block;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+.position-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.pos-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 10px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+.pos-btn span { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); }
+.pos-btn:hover { background: var(--bg-card-hover); }
+.pos-btn.selected.attack-btn { border-color: var(--accent-secondary); background: rgba(255,107,53,0.15); }
+.pos-btn.selected.attack-btn span { color: var(--accent-secondary); }
+.pos-btn.selected.defense-btn { border-color: var(--accent); background: rgba(0,212,255,0.1); }
+.pos-btn.selected.defense-btn span { color: var(--accent); }
+
+/* Legacy RPS (keeping for compat) */
 .rps-btn {
     width: 90px;
     height: 90px;
@@ -349,6 +401,7 @@ body {
 .match-card .match-status.lost { color: var(--danger); }
 .match-card .match-status.draw { color: var(--gold); }
 .match-card .match-status.waiting { color: var(--accent); }
+.match-card .match-status.ready { color: var(--gold); font-weight: 600; }
 
 /* Challenger Info */
 .challenger-info {
@@ -491,6 +544,71 @@ body {
     gap: 12px;
     margin-top: 12px;
 }
+
+/* Belt Badge */
+.belt-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 1px;
+    border: 1px solid;
+}
+.belt-badge.small { padding: 2px 8px; font-size: 0.65rem; }
+.user-info-row { display: flex; align-items: center; gap: 10px; }
+.username { font-weight: 700; }
+.game-title.small { font-size: 2rem; }
+
+/* H2H Record */
+.h2h-record { text-align: center; }
+.h2h-text { font-size: 0.9rem; color: var(--text-dim); }
+.h2h-wins { color: var(--success); font-weight: 700; }
+.h2h-draws { color: var(--gold); font-weight: 700; }
+.h2h-losses { color: var(--danger); font-weight: 700; }
+
+/* Round Attack Display */
+.round-attacks {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    justify-content: center;
+}
+.round-attack-col { text-align: center; }
+.atk-label { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 4px; }
+.atk-result { font-size: 1.1rem; font-weight: 700; }
+.atk-result.hit { color: var(--accent-secondary); }
+.atk-result.blocked { color: var(--accent); }
+.round-vs { color: var(--text-dim); font-size: 0.85rem; }
+.round-subtitle { color: var(--text-dim); font-size: 0.9rem; }
+
+/* Leaderboard */
+.leaderboard-list { padding: 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; overflow-y: auto; }
+.leaderboard-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+.leaderboard-row.is-you { border-color: var(--accent); background: rgba(0,212,255,0.05); }
+.lb-rank { font-weight: 700; min-width: 36px; font-size: 1rem; }
+.lb-name { flex: 1; font-weight: 600; font-size: 0.9rem; }
+.lb-record { color: var(--text-dim); font-size: 0.8rem; white-space: nowrap; }
+
+/* Share Options */
+.share-options { display: flex; gap: 10px; margin-top: 12px; }
+
+/* Onboarding Steps */
+.workshop-step-indicator { display: flex; gap: 6px; align-items: center; }
+.step-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--border);
+}
+.step-dot.active { background: var(--accent); width: 10px; height: 10px; }
+.step-dot.done { background: var(--success); }
 
 /* Animations */
 @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
