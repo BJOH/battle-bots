@@ -23,6 +23,8 @@ const Auth = {
         const { data: { session } } = await sb.auth.getSession();
         if (session) {
             State.user = session.user;
+            const username = session.user.user_metadata?.username || 'Bot_' + session.user.id.slice(0, 8);
+            await this.ensureProfile(username);
             await this.loadProfile();
             this.routeAfterAuth();
             return;
@@ -76,6 +78,8 @@ const Auth = {
         if (error) { errEl.textContent = error.message; return; }
 
         State.user = data.user;
+        const username = data.user.user_metadata?.username || 'Bot_' + data.user.id.slice(0, 8);
+        await this.ensureProfile(username);
         await this.loadProfile();
         this.routeAfterAuth();
     },
