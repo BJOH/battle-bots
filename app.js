@@ -186,6 +186,82 @@ const App = {
     }
 };
 
+// ===== PvE TEST BOT (remove later) =====
+const PveBot = {
+    NAMES: ['TrainerBot', 'SparBot', 'DummyMk2', 'PracticeUnit', 'Testbot-9000'],
+
+    randomRobot() {
+        const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+        return {
+            name: this.NAMES[Math.floor(Math.random() * this.NAMES.length)],
+            parts: {
+                head: pick(PARTS.head).id,
+                torso: pick(PARTS.torso).id,
+                arms: pick(PARTS.arms).id,
+                legs: pick(PARTS.legs).id,
+                weapon: pick(PARTS.weapon).id,
+                special: pick(PARTS.special).id,
+            }
+        };
+    },
+
+    play() {
+        if (!State.robot) {
+            Workshop.startOnboarding();
+            return;
+        }
+        ChooseMoves.start();
+        // Override commit button to play vs bot instead of creating a challenge
+        const btn = document.getElementById('commit-btn');
+        btn.textContent = 'Fight TestBot';
+        btn.onclick = () => this.fight();
+    },
+
+    fight() {
+        const playerChoices = ChooseMoves.choices.slice();
+        const moves = ['rock', 'paper', 'scissors'];
+        const botChoices = [0, 1, 2].map(() => moves[Math.floor(Math.random() * 3)]);
+        const botRobot = this.randomRobot();
+
+        // Resolve locally
+        const roundResults = [];
+        let cWins = 0, oWins = 0;
+        for (let i = 0; i < 3; i++) {
+            const cm = playerChoices[i], om = botChoices[i];
+            let winner;
+            if (cm === om) winner = 'draw';
+            else if ((cm === 'rock' && om === 'scissors') ||
+                     (cm === 'paper' && om === 'rock') ||
+                     (cm === 'scissors' && om === 'paper')) {
+                winner = 'challenger'; cWins++;
+            } else { winner = 'opponent'; oWins++; }
+            roundResults.push({ round: i + 1, challenger_move: cm, opponent_move: om, winner });
+        }
+
+        const fakeMatch = {
+            id: 'pve-test',
+            challenger_id: State.user.id,
+            challenger_robot: State.robot,
+            challenger_choices: playerChoices,
+            opponent_id: 'bot',
+            opponent_robot: botRobot,
+            opponent_choices: botChoices,
+            status: 'complete',
+            winner_id: cWins > oWins ? State.user.id : (oWins > cWins ? 'bot' : null),
+            round_results: roundResults,
+            challenger: { username: State.profile?.username || 'You', wins: State.profile?.wins || 0 },
+            opponent: { username: botRobot.name, wins: 0 },
+        };
+
+        // Restore default commit button behavior for future use
+        const btn = document.getElementById('commit-btn');
+        btn.onclick = () => ChooseMoves.commit();
+        btn.textContent = 'Lock In Strategy';
+
+        BattlePlayback.playMatch(fakeMatch);
+    }
+};
+
 // ---- Workshop ----
 const Workshop = {
     currentCategory: 'head',
