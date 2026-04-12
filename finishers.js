@@ -16,16 +16,22 @@ const Finisher = {
     phaseTimer: 0,
     onComplete: null,
 
-    play(winnerParts, loserParts, winnerSize, loserSize, onComplete) {
+    play(opts) {
+        // Options: { leftParts, rightParts, leftSize, rightSize, winnerOnLeft, onComplete }
         this.canvas = document.getElementById('finisher-canvas');
         this.canvas.width = 600;
         this.canvas.height = 400;
         this.ctx = this.canvas.getContext('2d');
+        const winnerParts = opts.winnerOnLeft ? opts.leftParts : opts.rightParts;
+        const loserParts = opts.winnerOnLeft ? opts.rightParts : opts.leftParts;
+        const winnerSize = opts.winnerOnLeft ? opts.leftSize : opts.rightSize;
+        const loserSize = opts.winnerOnLeft ? opts.rightSize : opts.leftSize;
         this.winnerParts = getRenderParts(winnerParts);
         this.loserParts = getRenderParts(loserParts);
         this.winnerSize = winnerSize;
         this.loserSize = loserSize;
-        this.onComplete = onComplete;
+        this.flipped = !opts.winnerOnLeft; // player lost → mirror canvas
+        this.onComplete = opts.onComplete;
         this.particles = [];
         this.frame = 0;
         this.phase = 'intro';
@@ -42,6 +48,82 @@ const Finisher = {
 
         if (this.animId) cancelAnimationFrame(this.animId);
         this.animate();
+    },
+
+    playDraw(leftParts, rightParts, leftSize, rightSize, onComplete) {
+        this.canvas = document.getElementById('finisher-canvas');
+        this.canvas.width = 600;
+        this.canvas.height = 400;
+        this.ctx = this.canvas.getContext('2d');
+        this._leftParts = getRenderParts(leftParts);
+        this._rightParts = getRenderParts(rightParts);
+        this.particles = [];
+        this.frame = 0;
+        this.phase = 'draw';
+        this.phaseTimer = 0;
+        this.flipped = false;
+        this.screenShake = 0;
+        this.impactFlash = 0;
+        this.onComplete = onComplete;
+        document.getElementById('finisher-overlay').classList.remove('visible');
+        if (this.animId) cancelAnimationFrame(this.animId);
+        this.animateDraw();
+    },
+
+    animateDraw() {
+        this.frame++;
+        this.phaseTimer++;
+        const ctx = this.ctx;
+        ctx.save();
+
+        if (this.screenShake > 0) {
+            ctx.translate((Math.random() - 0.5) * this.screenShake, (Math.random() - 0.5) * this.screenShake);
+            this.screenShake *= 0.9;
+            if (this.screenShake < 0.5) this.screenShake = 0;
+        }
+
+        ctx.fillStyle = '#050810';
+        ctx.fillRect(-20, -20, 640, 440);
+        ctx.fillStyle = '#0a1020';
+        ctx.fillRect(-20, 300, 640, 120);
+        ctx.strokeStyle = '#1a2a4a';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-20, 300);
+        ctx.lineTo(640, 300);
+        ctx.stroke();
+
+        // Both robots leaning in, weapons locked at center — ~1.5s of clash, then recoil
+        const t = Math.min(1, this.phaseTimer / 45);
+        const leanL = 180 + 40 * this.easeIn(t);
+        const leanR = 420 - 40 * this.easeIn(t);
+        this.drawRobot(this._leftParts, leanL, 0, 1.2, false);
+        this.drawRobot(this._rightParts, leanR, 0, 1.2, true);
+
+        // Sparks flying between them while they clash
+        if (this.phaseTimer > 30 && this.phaseTimer % 3 === 0) {
+            for (let i = 0; i < 3; i++) this.spawnSpark(300 + (Math.random() - 0.5) * 60, 190 + (Math.random() - 0.5) * 40);
+            if (this.phaseTimer % 12 === 0) this.screenShake = 6;
+        }
+
+        // Clash flash
+        if (this.phaseTimer > 40 && this.phaseTimer < 55) {
+            const a = 1 - (this.phaseTimer - 40) / 15;
+            ctx.fillStyle = `rgba(255,215,0,${a * 0.4})`;
+            ctx.beginPath();
+            ctx.arc(300, 200, 80, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        this.updateParticles();
+        ctx.restore();
+
+        if (this.phaseTimer >= 90) {
+            if (this.onComplete) { this.onComplete(); this.onComplete = null; }
+        }
+        if (this.phase === 'draw') {
+            this.animId = requestAnimationFrame(() => this.animateDraw());
+        }
     },
 
     animate() {
@@ -61,6 +143,12 @@ const Finisher = {
         // Dark background
         this.ctx.fillStyle = '#050810';
         this.ctx.fillRect(-20, -20, 640, 440);
+
+        // Mirror the canvas so player stays on left when they lost
+        if (this.flipped) {
+            this.ctx.translate(600, 0);
+            this.ctx.scale(-1, 1);
+        }
 
         // Floor
         this.ctx.fillStyle = '#0a1020';

@@ -1010,6 +1010,34 @@ const BattlePlayback = {
         await this.wait(1100);
     },
 
+    showRpsIcon(side, move) {
+        const el = document.getElementById(side === 'left' ? 'rps-icon-left' : 'rps-icon-right');
+        el.textContent = RPS_ICON[move];
+        // restart the pop animation
+        el.classList.remove('visible');
+        void el.offsetWidth;
+        el.classList.add('visible');
+    },
+
+    hideRpsIcons() {
+        document.getElementById('rps-icon-left').classList.remove('visible');
+        document.getElementById('rps-icon-right').classList.remove('visible');
+    },
+
+    async animateStrike(canvas, attackerSide, weapon) {
+        const start = performance.now();
+        const dur = 550;
+        await new Promise(resolve => {
+            const tick = (now) => {
+                const p = Math.min(1, (now - start) / dur);
+                this.drawStrike(canvas, attackerSide, weapon, p);
+                if (p < 1) requestAnimationFrame(tick);
+                else resolve();
+            };
+            requestAnimationFrame(tick);
+        });
+    },
+
     async playNextRound() {
         if (this.currentRound >= this.roundResults.length) {
             this.showFinisher();
@@ -1035,96 +1063,101 @@ const BattlePlayback = {
         const pWeapon = playerRobot ? getWeaponType(playerRobot.parts) : 'energy';
         const oWeapon = opponentRobot ? getWeaponType(opponentRobot.parts) : 'energy';
 
+        // Alternate attacker: rounds 1 & 3 player attacks, round 2 opponent attacks
+        const attackerSide = this.currentRound % 2 === 0 ? 'player' : 'opponent';
+        const defenderSide = attackerSide === 'player' ? 'opponent' : 'player';
+        const attackerMove = attackerSide === 'player' ? playerMove : opponentMove;
+        const defenderMove = attackerSide === 'player' ? opponentMove : playerMove;
+        const attackerWeapon = attackerSide === 'player' ? pWeapon : oWeapon;
+        const defenderWeapon = attackerSide === 'player' ? oWeapon : pWeapon;
+        const attackerIconSide = attackerSide === 'player' ? 'left' : 'right';
+        const defenderIconSide = attackerSide === 'player' ? 'right' : 'left';
+
         const roundNum = this.currentRound + 1;
-        const roundLabels = ['FIGHT!', 'ROUND 2', 'FINAL ROUND'];
+        const fightLabels = ['ROUND 1 — FIGHT!', 'ROUND 2 — FIGHT!', 'FINAL ROUND — FIGHT!'];
 
         // Phase 1: Announcer
-        display.innerHTML = `<div class="round-announcer">ROUND ${roundNum}</div><div class="round-sub">${roundLabels[this.currentRound] || ''}</div>`;
+        this.hideRpsIcons();
         this.drawStance(canvas, playerRobot, opponentRobot);
-        await this.wait(1000);
+        display.innerHTML = `<div class="round-announcer">${fightLabels[this.currentRound]}</div>`;
+        await this.wait(1100);
+        display.innerHTML = '';
+        await this.wait(150);
 
-        // Phase 2: Reveal both choices as giant icons above robots
-        display.innerHTML = `
-            <div class="round-callout">
-                <span class="callout-you">You: ${RPS_ICON[playerMove]} ${RPS_LABEL[playerMove]}</span>
-                <span class="callout-them">Them: ${RPS_ICON[opponentMove]} ${RPS_LABEL[opponentMove]}</span>
-            </div>
-        `;
-        const revealStart = performance.now();
-        await new Promise(resolve => {
-            const tick = (now) => {
-                const p = Math.min(1, (now - revealStart) / 500);
-                this.drawRpsOverlay(canvas, playerMove, opponentMove, p);
-                if (p < 1) requestAnimationFrame(tick);
-                else resolve();
-            };
-            requestAnimationFrame(tick);
-        });
-        await this.wait(900);
+        // Phase 2: Attacker reveals RPS
+        this.showRpsIcon(attackerIconSide, attackerMove);
+        display.innerHTML = `<div class="round-callout"><span class="${attackerSide === 'player' ? 'callout-you' : 'callout-them'}">${attackerSide === 'player' ? 'YOU' : 'THEY'} ATTACK!</span></div>`;
+        await this.wait(650);
 
-        // Phase 3: Resolve
+        // Phase 3: Attacker strikes — projectile flies
+        await this.animateStrike(canvas, attackerSide, attackerWeapon);
+
+        // Phase 4: Defender reveals RPS
+        this.showRpsIcon(defenderIconSide, defenderMove);
+        await this.wait(500);
+
+        // Phase 5: Resolve
+        let verdictText, verdictClass;
         if (winnerSide === 'draw') {
-            display.innerHTML = `<div class="round-verdict"><div class="verdict-col blocked pop">⚖️ DRAW</div></div>`;
+            // Defender blocks the strike — tie
             this.drawStance(canvas, playerRobot, opponentRobot);
-            await this.wait(1400);
-        } else {
-            // Winner's bot attacks, loser takes hit
-            const attackerSide = winnerSide;
-            const loserSide = attackerSide === 'player' ? 'opponent' : 'player';
-            const weapon = attackerSide === 'player' ? pWeapon : oWeapon;
-            const winMove = attackerSide === 'player' ? playerMove : opponentMove;
-            const loseMove = attackerSide === 'player' ? opponentMove : playerMove;
-
-            display.innerHTML = `
-                <div class="round-callout">
-                    <span class="${attackerSide === 'player' ? 'callout-you' : 'callout-them'}">
-                        ${RPS_ICON[winMove]} ${RPS_LABEL[winMove]} beats ${RPS_ICON[loseMove]} ${RPS_LABEL[loseMove]}!
-                    </span>
-                </div>
-            `;
-
-            // Strike animation
-            const sStart = performance.now();
-            const sDur = 600;
-            await new Promise(resolve => {
-                const tick = (now) => {
-                    const p = Math.min(1, (now - sStart) / sDur);
-                    this.drawStrike(canvas, attackerSide, weapon, p);
-                    if (p < 1) requestAnimationFrame(tick);
-                    else resolve();
-                };
-                requestAnimationFrame(tick);
-            });
-
-            // Impact
-            this.drawHit(canvas, loserSide);
+            const ctx = canvas.getContext('2d');
+            const blockX = defenderSide === 'player' ? 200 : 400;
+            this.drawImpactFx(ctx, blockX, 185, false);
+            verdictText = `⚖️ ${RPS_LABEL[attackerMove]} vs ${RPS_LABEL[defenderMove]} — DRAW!`;
+            verdictClass = 'blocked';
+            await this.wait(300);
+        } else if (winnerSide === attackerSide) {
+            // Attacker wins — hit lands
+            this.drawHit(canvas, defenderSide);
             canvas.classList.add('shake');
             setTimeout(() => canvas.classList.remove('shake'), 350);
-
-            // Score update
-            if (attackerSide === 'player') {
-                this.playerScore++;
-                const ps = document.getElementById('battle-player-score');
-                ps.textContent = this.playerScore;
-                ps.classList.add('flash');
-                setTimeout(() => ps.classList.remove('flash'), 800);
-            } else {
-                this.opponentScore++;
-                const os = document.getElementById('battle-opponent-score');
-                os.textContent = this.opponentScore;
-                os.classList.add('flash');
-                setTimeout(() => os.classList.remove('flash'), 800);
-            }
-
-            const winLabel = attackerSide === 'player' ? 'YOU WIN THE ROUND!' : 'THEY WIN THE ROUND!';
-            display.innerHTML = `<div class="round-verdict"><div class="verdict-col ${attackerSide === 'player' ? 'blocked' : 'hit'} pop">${winLabel}</div></div>`;
-            await this.wait(1400);
+            verdictText = `💥 ${RPS_LABEL[attackerMove]} BEATS ${RPS_LABEL[defenderMove]} — HIT!`;
+            verdictClass = attackerSide === 'player' ? 'blocked' : 'hit';
+            this.bumpScore(attackerSide);
+        } else {
+            // Defender wins — block then counter-attack
+            this.drawStance(canvas, playerRobot, opponentRobot);
+            const ctx = canvas.getContext('2d');
+            const blockX = defenderSide === 'player' ? 200 : 400;
+            this.drawImpactFx(ctx, blockX, 185, false);
+            await this.wait(550);
+            // Counter strike
+            display.innerHTML = `<div class="round-callout"><span class="${defenderSide === 'player' ? 'callout-you' : 'callout-them'}">COUNTER ATTACK!</span></div>`;
+            await this.animateStrike(canvas, defenderSide, defenderWeapon);
+            this.drawHit(canvas, attackerSide);
+            canvas.classList.add('shake');
+            setTimeout(() => canvas.classList.remove('shake'), 350);
+            verdictText = `🛡️💥 ${RPS_LABEL[defenderMove]} BLOCKS ${RPS_LABEL[attackerMove]} — COUNTER HIT!`;
+            verdictClass = defenderSide === 'player' ? 'blocked' : 'hit';
+            this.bumpScore(defenderSide);
         }
 
+        display.innerHTML = `<div class="round-verdict"><div class="verdict-col ${verdictClass} pop">${verdictText}</div></div>`;
+        await this.wait(1500);
+
         this.currentRound++;
+        this.hideRpsIcons();
         this.drawStance(canvas, playerRobot, opponentRobot);
+        display.innerHTML = '';
         await this.wait(250);
         this.playNextRound();
+    },
+
+    bumpScore(side) {
+        if (side === 'player') {
+            this.playerScore++;
+            const ps = document.getElementById('battle-player-score');
+            ps.textContent = this.playerScore;
+            ps.classList.add('flash');
+            setTimeout(() => ps.classList.remove('flash'), 800);
+        } else {
+            this.opponentScore++;
+            const os = document.getElementById('battle-opponent-score');
+            os.textContent = this.opponentScore;
+            os.classList.add('flash');
+            setTimeout(() => os.classList.remove('flash'), 800);
+        }
     },
 
     animateRoundAttack(canvas, pAtk, oAtk, pDef, oDef, pHit, oHit, pWeapon, oWeapon, pRobot, oRobot) {
@@ -1230,44 +1263,48 @@ const BattlePlayback = {
     },
 
     showFinisher() {
+        const playerRobot = this.isChallenger ? this.matchData.challenger_robot : this.matchData.opponent_robot;
+        const opponentRobot = this.isChallenger ? this.matchData.opponent_robot : this.matchData.challenger_robot;
+        const playerName = this.isChallenger ? this.matchData.challenger?.username : this.matchData.opponent?.username;
+        const opponentName = this.isChallenger ? this.matchData.opponent?.username : this.matchData.challenger?.username;
+
         const won = this.playerScore > this.opponentScore;
         const draw = this.playerScore === this.opponentScore;
 
+        App.showScreen('finisher');
+
+        const overlay = document.getElementById('finisher-overlay');
+        const text = document.getElementById('finisher-text');
+        const winner = document.getElementById('finisher-winner');
+
         if (draw) {
-            const display = document.getElementById('round-display');
-            display.innerHTML = `
-                <div class="round-result draw" style="font-size:1.5rem">IT'S A DRAW!</div>
-                <div style="margin-top:16px;display:flex;gap:12px">
-                    <button class="btn btn-primary" onclick="App.showScreen('menu')">Main Menu</button>
-                </div>
-            `;
+            Finisher.playDraw(playerRobot.parts, opponentRobot.parts,
+                getRobotSizeClass(playerRobot.parts), getRobotSizeClass(opponentRobot.parts), () => {
+                text.textContent = "IT'S A DRAW";
+                text.className = 'finisher-text draw';
+                winner.textContent = `${playerName} and ${opponentName} — evenly matched!`;
+                overlay.classList.add('visible');
+            });
             return;
         }
 
-        const winnerRobot = won
-            ? (this.isChallenger ? this.matchData.challenger_robot : this.matchData.opponent_robot)
-            : (this.isChallenger ? this.matchData.opponent_robot : this.matchData.challenger_robot);
-        const loserRobot = won
-            ? (this.isChallenger ? this.matchData.opponent_robot : this.matchData.challenger_robot)
-            : (this.isChallenger ? this.matchData.challenger_robot : this.matchData.opponent_robot);
-        const winnerName = won
-            ? (this.isChallenger ? this.matchData.challenger?.username : this.matchData.opponent?.username)
-            : (this.isChallenger ? this.matchData.opponent?.username : this.matchData.challenger?.username);
-
-        const winnerSize = getRobotSizeClass(winnerRobot.parts);
-        const loserSize = getRobotSizeClass(loserRobot.parts);
-
-        App.showScreen('finisher');
-
-        Finisher.play(winnerRobot.parts, loserRobot.parts, winnerSize, loserSize, () => {
-            const overlay = document.getElementById('finisher-overlay');
-            const text = document.getElementById('finisher-text');
-            const winner = document.getElementById('finisher-winner');
-
-            text.textContent = won ? 'VICTORY' : 'DESTROYED';
-            text.className = `finisher-text ${won ? 'victory' : ''}`;
-            winner.textContent = `${winnerName} wins!`;
-            overlay.classList.add('visible');
+        // Player is always on the left; opponent always on the right — match the battle layout.
+        // Pass leftParts/rightParts + which side holds the winner.
+        const winnerOnLeft = won;
+        Finisher.play({
+            leftParts: playerRobot.parts,
+            rightParts: opponentRobot.parts,
+            leftSize: getRobotSizeClass(playerRobot.parts),
+            rightSize: getRobotSizeClass(opponentRobot.parts),
+            winnerOnLeft,
+            onComplete: () => {
+                const winnerName = won ? playerName : opponentName;
+                const loserName = won ? opponentName : playerName;
+                text.textContent = `${winnerName.toUpperCase()} DESTROYS ${loserName.toUpperCase()}`;
+                text.className = `finisher-text ${won ? 'victory' : ''}`;
+                winner.textContent = won ? 'VICTORY!' : 'DEFEATED';
+                overlay.classList.add('visible');
+            }
         });
     },
 
