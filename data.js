@@ -102,6 +102,20 @@ const POSITIONS = ['high', 'mid', 'low'];
 const POSITION_ICONS = { high: '⬆️', mid: '➡️', low: '⬇️' };
 const POSITION_LABELS = { high: 'HIGH', mid: 'MID', low: 'LOW' };
 
+// Rock / Paper / Scissors
+const RPS_MOVES = [
+    { id: 'rock',     label: 'Rock',     icon: '✊', beats: 'scissors' },
+    { id: 'paper',    label: 'Paper',    icon: '✋', beats: 'rock' },
+    { id: 'scissors', label: 'Scissors', icon: '✌️', beats: 'paper' },
+];
+const RPS_ICON = { rock: '✊', paper: '✋', scissors: '✌️' };
+const RPS_LABEL = { rock: 'ROCK', paper: 'PAPER', scissors: 'SCISSORS' };
+function resolveRPS(a, b) {
+    if (a === b) return 'draw';
+    const ma = RPS_MOVES.find(m => m.id === a);
+    return ma && ma.beats === b ? 'a' : 'b';
+}
+
 // Belt system
 const BELTS = [
     { name: 'White Belt', minWins: 0, color: '#e0e0e0', bg: 'rgba(224,224,224,0.15)' },

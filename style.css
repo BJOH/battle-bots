@@ -333,6 +333,34 @@ body {
 .pos-btn.selected.defense-btn { border-color: var(--accent); background: rgba(0,212,255,0.1); }
 .pos-btn.selected.defense-btn span { color: var(--accent); }
 
+/* Rock-Paper-Scissors choice */
+.rps-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 12px;
+}
+.rps-btn {
+    flex: 1;
+    max-width: 110px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 14px 8px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.rps-btn:hover { background: var(--bg-card-hover); transform: translateY(-2px); }
+.rps-btn .rps-icon { font-size: 2rem; line-height: 1; }
+.rps-btn .rps-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); font-weight: 700; }
+.rps-btn.selected { border-color: var(--accent); background: rgba(0,212,255,0.12); }
+.rps-btn.selected .rps-label { color: var(--accent); }
+
 /* Legacy RPS (keeping for compat) */
 .rps-btn {
     width: 90px;
@@ -613,7 +641,65 @@ body {
 /* Animations */
 @keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
 @keyframes slideIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
-.shake { animation: shake 0.3s ease; }
+.shake { animation: shake 0.35s ease; }
+
+/* Round drama */
+@keyframes announcerIn {
+    0% { opacity: 0; transform: scale(2.4) rotate(-4deg); letter-spacing: 40px; }
+    40% { opacity: 1; transform: scale(1) rotate(0); letter-spacing: 4px; }
+    100% { opacity: 1; transform: scale(1); letter-spacing: 4px; }
+}
+@keyframes pop {
+    0% { opacity: 0; transform: scale(0.3); }
+    50% { opacity: 1; transform: scale(1.25); }
+    100% { opacity: 1; transform: scale(1); }
+}
+@keyframes scoreFlash {
+    0%,100% { transform: scale(1); color: inherit; }
+    50% { transform: scale(1.6); color: #ffd700; text-shadow: 0 0 20px #ffd700; }
+}
+.round-announcer {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 900;
+    color: var(--accent);
+    text-shadow: 0 0 24px var(--accent), 0 0 8px #fff;
+    letter-spacing: 4px;
+    animation: announcerIn 0.9s cubic-bezier(.2,.9,.2,1) both;
+}
+.round-sub {
+    font-size: 0.85rem;
+    color: var(--accent-secondary);
+    letter-spacing: 6px;
+    margin-top: 4px;
+    opacity: 0.85;
+}
+.round-callout {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    font-size: 0.95rem;
+    font-weight: 700;
+    animation: slideIn 0.3s ease;
+}
+.callout-you { color: var(--accent); }
+.callout-them { color: var(--accent-secondary); }
+.suspense { color: #ffd700; font-style: italic; opacity: 0.9; margin-left: 12px; animation: pulse 0.6s ease infinite alternate; }
+@keyframes pulse { from { opacity: 0.5; } to { opacity: 1; } }
+.round-verdict {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.4rem;
+    font-weight: 900;
+    font-family: 'Orbitron', sans-serif;
+}
+.verdict-col.pop { animation: pop 0.35s cubic-bezier(.2,.9,.2,1) both; }
+.verdict-col.hit { color: #ff3d57; text-shadow: 0 0 16px #ff3d57; }
+.verdict-col.blocked { color: var(--accent); text-shadow: 0 0 16px var(--accent); }
+.verdict-sep { opacity: 0.4; font-size: 1.8rem; }
+.fighter-score.flash { animation: scoreFlash 0.8s ease; }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }

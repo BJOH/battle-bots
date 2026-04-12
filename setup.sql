@@ -69,7 +69,8 @@ create policy "Authenticated users can see waiting matches"
 create policy "Users can create matches"
   on matches for insert with check (auth.uid() = challenger_id);
 
--- Function to join and resolve a match
+-- Function to join and resolve a match (Rock/Paper/Scissors)
+-- challenger_choices and p_choices are arrays of 3 strings: 'rock' | 'paper' | 'scissors'
 create or replace function join_match(
   p_match_id uuid,
   p_choices jsonb,
@@ -79,16 +80,11 @@ declare
   v_match matches;
   v_result jsonb;
   v_round_results jsonb := '[]'::jsonb;
-  v_challenger_hits int := 0;
-  v_opponent_hits int := 0;
-  v_c_choice jsonb;
-  v_o_choice jsonb;
-  v_c_attack text;
-  v_c_defense text;
-  v_o_attack text;
-  v_o_defense text;
-  v_c_hit boolean;
-  v_o_hit boolean;
+  v_challenger_wins int := 0;
+  v_opponent_wins int := 0;
+  v_c_move text;
+  v_o_move text;
+  v_round_winner text;
   v_winner_id uuid;
 begin
   select * into v_match from matches where id = p_match_id for update;
@@ -111,37 +107,33 @@ begin
 
   -- Resolve each round
   for i in 0..2 loop
-    v_c_choice := v_match.challenger_choices->i;
-    v_o_choice := p_choices->i;
+    v_c_move := v_match.challenger_choices->>i;
+    v_o_move := p_choices->>i;
 
-    v_c_attack := v_c_choice->>'attack';
-    v_c_defense := v_c_choice->>'defense';
-    v_o_attack := v_o_choice->>'attack';
-    v_o_defense := v_o_choice->>'defense';
-
-    -- Challenger hits if their attack != opponent defense
-    v_c_hit := (v_c_attack != v_o_defense);
-    -- Opponent hits if their attack != challenger defense
-    v_o_hit := (v_o_attack != v_c_defense);
-
-    if v_c_hit then v_challenger_hits := v_challenger_hits + 1; end if;
-    if v_o_hit then v_opponent_hits := v_opponent_hits + 1; end if;
+    if v_c_move = v_o_move then
+      v_round_winner := 'draw';
+    elsif (v_c_move = 'rock' and v_o_move = 'scissors')
+       or (v_c_move = 'paper' and v_o_move = 'rock')
+       or (v_c_move = 'scissors' and v_o_move = 'paper') then
+      v_round_winner := 'challenger';
+      v_challenger_wins := v_challenger_wins + 1;
+    else
+      v_round_winner := 'opponent';
+      v_opponent_wins := v_opponent_wins + 1;
+    end if;
 
     v_round_results := v_round_results || jsonb_build_object(
       'round', i + 1,
-      'challenger_attack', v_c_attack,
-      'challenger_defense', v_c_defense,
-      'opponent_attack', v_o_attack,
-      'opponent_defense', v_o_defense,
-      'challenger_hit', v_c_hit,
-      'opponent_hit', v_o_hit
+      'challenger_move', v_c_move,
+      'opponent_move', v_o_move,
+      'winner', v_round_winner
     );
   end loop;
 
   -- Determine winner
-  if v_challenger_hits > v_opponent_hits then
+  if v_challenger_wins > v_opponent_wins then
     v_winner_id := v_match.challenger_id;
-  elsif v_opponent_hits > v_challenger_hits then
+  elsif v_opponent_wins > v_challenger_wins then
     v_winner_id := auth.uid();
   else
     v_winner_id := null;
@@ -170,8 +162,8 @@ begin
   select jsonb_build_object(
     'match_id', p_match_id,
     'round_results', v_round_results,
-    'challenger_hits', v_challenger_hits,
-    'opponent_hits', v_opponent_hits,
+    'challenger_wins', v_challenger_wins,
+    'opponent_wins', v_opponent_wins,
     'winner_id', v_winner_id
   ) into v_result;
 

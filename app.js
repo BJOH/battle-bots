@@ -325,29 +325,14 @@ function buildRoundsUI(containerId, prefix) {
     container.innerHTML = [1, 2, 3].map(r => `
         <div class="round-block">
             <h3>Round ${r}</h3>
-            <div class="attack-defense-row">
-                <div class="choice-group">
-                    <label>Attack</label>
-                    <div class="position-buttons">
-                        ${POSITIONS.map(p => `
-                            <button class="pos-btn attack-btn" data-round="${r}" data-type="attack" data-pos="${p}"
-                                onclick="${prefix}.pick(${r},'attack','${p}', this)">
-                                ${POSITION_ICONS[p]}<span>${POSITION_LABELS[p]}</span>
-                            </button>
-                        `).join('')}
-                    </div>
-                </div>
-                <div class="choice-group">
-                    <label>Defense</label>
-                    <div class="position-buttons">
-                        ${POSITIONS.map(p => `
-                            <button class="pos-btn defense-btn" data-round="${r}" data-type="defense" data-pos="${p}"
-                                onclick="${prefix}.pick(${r},'defense','${p}', this)">
-                                ${POSITION_ICONS[p]}<span>${POSITION_LABELS[p]}</span>
-                            </button>
-                        `).join('')}
-                    </div>
-                </div>
+            <div class="rps-buttons">
+                ${RPS_MOVES.map(m => `
+                    <button class="rps-btn" data-round="${r}" data-move="${m.id}"
+                        onclick="${prefix}.pick(${r},'${m.id}', this)">
+                        <span class="rps-icon">${m.icon}</span>
+                        <span class="rps-label">${m.label}</span>
+                    </button>
+                `).join('')}
             </div>
         </div>
     `).join('');
@@ -355,24 +340,22 @@ function buildRoundsUI(containerId, prefix) {
 
 // ---- Choose Moves (Create Challenge) ----
 const ChooseMoves = {
-    choices: [{}, {}, {}],
+    choices: [null, null, null],
 
     start() {
-        this.choices = [{}, {}, {}];
+        this.choices = [null, null, null];
         buildRoundsUI('rounds-chooser', 'ChooseMoves');
         document.getElementById('commit-btn').disabled = true;
         document.getElementById('commit-btn').textContent = 'Lock In Strategy';
         App.showScreen('choose');
     },
 
-    pick(round, type, pos, btn) {
-        this.choices[round - 1][type] = pos;
-        // Highlight selected
-        const siblings = btn.parentElement.querySelectorAll('.pos-btn');
+    pick(round, move, btn) {
+        this.choices[round - 1] = move;
+        const siblings = btn.parentElement.querySelectorAll('.rps-btn');
         siblings.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
-        // Check if all chosen
-        const allChosen = this.choices.every(c => c.attack && c.defense);
+        const allChosen = this.choices.every(c => c !== null);
         document.getElementById('commit-btn').disabled = !allChosen;
     },
 
@@ -400,7 +383,7 @@ const ChooseMoves = {
 // ---- Join Match ----
 const JoinMatch = {
     matchData: null,
-    choices: [{}, {}, {}],
+    choices: [null, null, null],
 
     async load(matchId) {
         const { data, error } = await sb.from('matches')
@@ -428,7 +411,7 @@ const JoinMatch = {
         }
 
         this.matchData = data;
-        this.choices = [{}, {}, {}];
+        this.choices = [null, null, null];
 
         // Show challenger info
         const belt = getBelt(data.challenger?.wins || 0);
@@ -478,12 +461,12 @@ const JoinMatch = {
         el.innerHTML = `<p class="h2h-text">Head-to-head: <span class="h2h-wins">${myWins}W</span> - <span class="h2h-draws">${draws}D</span> - <span class="h2h-losses">${theirWins}L</span></p>`;
     },
 
-    pick(round, type, pos, btn) {
-        this.choices[round - 1][type] = pos;
-        const siblings = btn.parentElement.querySelectorAll('.pos-btn');
+    pick(round, move, btn) {
+        this.choices[round - 1] = move;
+        const siblings = btn.parentElement.querySelectorAll('.rps-btn');
         siblings.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
-        const allChosen = this.choices.every(c => c.attack && c.defense);
+        const allChosen = this.choices.every(c => c !== null);
         document.getElementById('join-commit-btn').disabled = !allChosen;
     },
 
@@ -666,7 +649,292 @@ const BattlePlayback = {
         }
     },
 
-    playNextRound() {
+    drawStance(canvas, pRobot, oRobot) {
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#2a3a5c';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, 270);
+        ctx.lineTo(600, 270);
+        ctx.stroke();
+        if (pRobot) RobotRenderer.draw(canvas, getRenderParts(pRobot.parts), { scale: 1.0, offsetX: -120, offsetY: -10, noClear: true });
+        if (oRobot) RobotRenderer.draw(canvas, getRenderParts(oRobot.parts), { scale: 1.0, offsetX: 120, offsetY: -10, flip: true, noClear: true });
+    },
+
+    drawRpsOverlay(canvas, pMove, oMove, alpha = 1) {
+        this.drawStance(canvas, this._pRobot, this._oRobot);
+        const ctx = canvas.getContext('2d');
+        ctx.save();
+        ctx.globalAlpha = alpha;
+        ctx.font = '90px serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = '#00d4ff';
+        ctx.shadowBlur = 20;
+        ctx.fillText(RPS_ICON[pMove], 150, 90);
+        ctx.shadowColor = '#ff6b35';
+        ctx.fillText(RPS_ICON[oMove], 450, 90);
+        ctx.restore();
+    },
+
+    drawStrike(canvas, attackerSide, weapon, progress) {
+        this.drawStance(canvas, this._pRobot, this._oRobot);
+        const ctx = canvas.getContext('2d');
+        const startX = attackerSide === 'player' ? 220 : 380;
+        const endX = attackerSide === 'player' ? 400 : 200;
+        const x = startX + (endX - startX) * progress;
+        const dir = attackerSide === 'player' ? 1 : -1;
+        this.drawProjectile(ctx, x, 185, dir, weapon);
+    },
+
+    drawHit(canvas, loserSide) {
+        this.drawStance(canvas, this._pRobot, this._oRobot);
+        const ctx = canvas.getContext('2d');
+        const x = loserSide === 'player' ? 180 : 420;
+        this.drawImpactFx(ctx, x, 185, true);
+    },
+
+    drawTelegraph(canvas, pRobot, oRobot, pAtk, oAtk, pulse) {
+        this.drawStance(canvas, pRobot, oRobot);
+        const ctx = canvas.getContext('2d');
+        const atkY = { high: 130, mid: 185, low: 240 };
+        const r = 14 + Math.sin(pulse * 0.25) * 6;
+        const alpha = 0.4 + Math.sin(pulse * 0.25) * 0.3;
+        // Player charge (left → right)
+        ctx.save();
+        ctx.fillStyle = `rgba(0,212,255,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(-80 + 300, atkY[pAtk], r, 0, Math.PI * 2);
+        ctx.fill();
+        // Opponent charge
+        ctx.fillStyle = `rgba(255,107,53,${alpha})`;
+        ctx.beginPath();
+        ctx.arc(80 + 300, atkY[oAtk], r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    },
+
+    drawProjectiles(canvas, pRobot, oRobot, pAtk, oAtk, pWeapon, oWeapon, progress) {
+        this.drawStance(canvas, pRobot, oRobot);
+        const ctx = canvas.getContext('2d');
+        const atkY = { high: 130, mid: 185, low: 240 };
+        // Player projectile: x from 220 → 400
+        const pX = 220 + (400 - 220) * progress;
+        const oX = 380 - (380 - 200) * progress;
+        this.drawProjectile(ctx, pX, atkY[pAtk], 1, pWeapon);
+        this.drawProjectile(ctx, oX, atkY[oAtk], -1, oWeapon);
+    },
+
+    drawProjectile(ctx, x, y, dir, weaponType) {
+        ctx.save();
+        if (weaponType === 'beam') {
+            ctx.strokeStyle = '#ff1744';
+            ctx.lineWidth = 4;
+            ctx.shadowColor = '#ff1744';
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            ctx.moveTo(x - dir * 40, y);
+            ctx.lineTo(x, y);
+            ctx.stroke();
+        } else if (weaponType === 'plasma') {
+            ctx.fillStyle = '#ff6b35';
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 20;
+            ctx.beginPath();
+            ctx.arc(x, y, 12, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ffd700';
+            ctx.beginPath();
+            ctx.arc(x, y, 6, 0, Math.PI * 2);
+            ctx.fill();
+        } else if (weaponType === 'kinetic') {
+            ctx.fillStyle = '#ddd';
+            for (let i = 0; i < 4; i++) {
+                ctx.beginPath();
+                ctx.arc(x - dir * i * 10, y + (i % 2 ? 3 : -3), 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        } else {
+            ctx.fillStyle = '#00d4ff';
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(x, y, 9, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    },
+
+    drawImpact(canvas, pRobot, oRobot, pAtk, oAtk, pHit, oHit) {
+        this.drawStance(canvas, pRobot, oRobot);
+        const ctx = canvas.getContext('2d');
+        const atkY = { high: 130, mid: 185, low: 240 };
+        // Opponent gets hit on right side if pHit
+        this.drawImpactFx(ctx, 400, atkY[pAtk], pHit);
+        this.drawImpactFx(ctx, 200, atkY[oAtk], oHit);
+    },
+
+    drawImpactFx(ctx, x, y, isHit) {
+        ctx.save();
+        if (isHit) {
+            ctx.fillStyle = '#fff';
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 30;
+            ctx.beginPath();
+            ctx.arc(x, y, 22, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#ffd700';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 8; i++) {
+                const a = (i / 8) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(x + Math.cos(a) * 18, y + Math.sin(a) * 18);
+                ctx.lineTo(x + Math.cos(a) * 32, y + Math.sin(a) * 32);
+                ctx.stroke();
+            }
+        } else {
+            ctx.strokeStyle = '#00d4ff';
+            ctx.lineWidth = 3;
+            ctx.shadowColor = '#00d4ff';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            ctx.arc(x, y, 24, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.fillStyle = 'rgba(0,212,255,0.2)';
+            ctx.beginPath();
+            ctx.arc(x, y, 24, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    },
+
+    wait(ms) { return new Promise(r => setTimeout(r, ms)); },
+
+    drawSingleProjectile(canvas, pRobot, oRobot, attackerSide, pos, weapon, progress) {
+        this.drawStance(canvas, pRobot, oRobot);
+        const ctx = canvas.getContext('2d');
+        const atkY = { high: 130, mid: 185, low: 240 };
+        const startX = attackerSide === 'player' ? 220 : 380;
+        const endX = attackerSide === 'player' ? 400 : 200;
+        const x = startX + (endX - startX) * progress;
+        const dir = attackerSide === 'player' ? 1 : -1;
+        this.drawProjectile(ctx, x, atkY[pos], dir, weapon);
+    },
+
+    drawDefenseBrace(canvas, pRobot, oRobot, defenderSide, pos) {
+        this.drawStance(canvas, pRobot, oRobot);
+        const ctx = canvas.getContext('2d');
+        const atkY = { high: 130, mid: 185, low: 240 };
+        const x = defenderSide === 'player' ? 200 : 400;
+        ctx.save();
+        ctx.strokeStyle = '#00d4ff';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#00d4ff';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(x, atkY[pos], 26, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(0,212,255,0.18)';
+        ctx.beginPath();
+        ctx.arc(x, atkY[pos], 26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    },
+
+    async resolveExchange({ canvas, playerRobot, opponentRobot, attackerSide, attackPos, defensePos, weapon, hit, display, attackerLabel, defenderLabel }) {
+        const posLabel = POSITION_LABELS[attackPos];
+        const defLabel = POSITION_LABELS[defensePos];
+        const sideClass = attackerSide === 'player' ? 'callout-you' : 'callout-them';
+
+        // Telegraph the attack
+        display.innerHTML = `<div class="round-callout"><span class="${sideClass}">${attackerLabel} ${posLabel} ${POSITION_ICONS[attackPos]}</span></div>`;
+        const tStart = performance.now();
+        await new Promise(resolve => {
+            const tick = (now) => {
+                const el = now - tStart;
+                this.drawTelegraph(canvas, playerRobot, opponentRobot,
+                    attackerSide === 'player' ? attackPos : 'mid',
+                    attackerSide === 'opponent' ? attackPos : 'mid',
+                    el / 30);
+                // actually only draw one side
+                const ctx = canvas.getContext('2d');
+                this.drawStance(canvas, playerRobot, opponentRobot);
+                const atkY = { high: 130, mid: 185, low: 240 };
+                const r = 14 + Math.sin(el * 0.015) * 6;
+                const alpha = 0.4 + Math.sin(el * 0.015) * 0.3;
+                const cx = attackerSide === 'player' ? 220 : 380;
+                ctx.save();
+                ctx.fillStyle = attackerSide === 'player' ? `rgba(0,212,255,${alpha})` : `rgba(255,107,53,${alpha})`;
+                ctx.beginPath();
+                ctx.arc(cx, atkY[attackPos], r, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                if (el < 700) requestAnimationFrame(tick);
+                else resolve();
+            };
+            requestAnimationFrame(tick);
+        });
+
+        // Projectile flies
+        const pStart = performance.now();
+        const pDur = 550;
+        await new Promise(resolve => {
+            const tick = (now) => {
+                const p = Math.min(1, (now - pStart) / pDur);
+                this.drawSingleProjectile(canvas, playerRobot, opponentRobot, attackerSide, attackPos, weapon, p);
+                if (p < 1) requestAnimationFrame(tick);
+                else resolve();
+            };
+            requestAnimationFrame(tick);
+        });
+
+        // Suspense beat — defender braces
+        const defenderSide = attackerSide === 'player' ? 'opponent' : 'player';
+        this.drawDefenseBrace(canvas, playerRobot, opponentRobot, defenderSide, defensePos);
+        display.innerHTML = `<div class="round-callout"><span class="callout-them">${defenderLabel} ${defLabel} ${POSITION_ICONS[defensePos]}</span><span class="suspense">…will it block?</span></div>`;
+        await this.wait(600);
+
+        // Reveal
+        const ctx = canvas.getContext('2d');
+        this.drawStance(canvas, playerRobot, opponentRobot);
+        const atkY = { high: 130, mid: 185, low: 240 };
+        const impactX = attackerSide === 'player' ? 400 : 200;
+        this.drawImpactFx(ctx, impactX, atkY[attackPos], hit);
+        if (hit) {
+            canvas.classList.add('shake');
+            setTimeout(() => canvas.classList.remove('shake'), 350);
+        }
+        let verdict;
+        if (hit) {
+            verdict = attackerSide === 'player'
+                ? `<div class="verdict-col hit pop">💥 ${posLabel} HIT!</div>`
+                : `<div class="verdict-col hit pop">💥 ${posLabel} TAKEN!</div>`;
+        } else {
+            verdict = `<div class="verdict-col blocked pop">🛡️ ${defLabel} BLOCK! SAVED!</div>`;
+        }
+        display.innerHTML = `<div class="round-verdict">${verdict}</div>`;
+
+        // Update score during reveal
+        if (hit) {
+            if (attackerSide === 'player') {
+                this.playerScore++;
+                const ps = document.getElementById('battle-player-score');
+                ps.textContent = this.playerScore;
+                ps.classList.add('flash');
+                setTimeout(() => ps.classList.remove('flash'), 800);
+            } else {
+                this.opponentScore++;
+                const os = document.getElementById('battle-opponent-score');
+                os.textContent = this.opponentScore;
+                os.classList.add('flash');
+                setTimeout(() => os.classList.remove('flash'), 800);
+            }
+        }
+        await this.wait(1100);
+    },
+
+    async playNextRound() {
         if (this.currentRound >= this.roundResults.length) {
             this.showFinisher();
             return;
@@ -674,61 +942,113 @@ const BattlePlayback = {
 
         const round = this.roundResults[this.currentRound];
         const display = document.getElementById('round-display');
-
-        // Determine from perspective of current user
-        const playerAttack = this.isChallenger ? round.challenger_attack : round.opponent_attack;
-        const playerDefense = this.isChallenger ? round.challenger_defense : round.opponent_defense;
-        const opponentAttack = this.isChallenger ? round.opponent_attack : round.challenger_attack;
-        const opponentDefense = this.isChallenger ? round.opponent_defense : round.challenger_defense;
-        const playerHit = this.isChallenger ? round.challenger_hit : round.opponent_hit;
-        const opponentHit = this.isChallenger ? round.opponent_hit : round.challenger_hit;
-
-        // Show round starting
-        display.innerHTML = `<div class="round-label">Round ${this.currentRound + 1}</div><div class="round-subtitle">Engaging...</div>`;
-
-        // Animate the battle canvas
         const canvas = document.getElementById('battle-canvas');
+
+        const playerMove = this.isChallenger ? round.challenger_move : round.opponent_move;
+        const opponentMove = this.isChallenger ? round.opponent_move : round.challenger_move;
+        // winner stored as 'challenger' | 'opponent' | 'draw'
+        let winnerSide;
+        if (round.winner === 'draw') winnerSide = 'draw';
+        else if (round.winner === 'challenger') winnerSide = this.isChallenger ? 'player' : 'opponent';
+        else winnerSide = this.isChallenger ? 'opponent' : 'player';
+
         const playerRobot = this.isChallenger ? this.matchData.challenger_robot : this.matchData.opponent_robot;
         const opponentRobot = this.isChallenger ? this.matchData.opponent_robot : this.matchData.challenger_robot;
-        const weaponType = playerRobot ? getWeaponType(playerRobot.parts) : 'energy';
-        const oppWeaponType = opponentRobot ? getWeaponType(opponentRobot.parts) : 'energy';
+        this._pRobot = playerRobot;
+        this._oRobot = opponentRobot;
+        const pWeapon = playerRobot ? getWeaponType(playerRobot.parts) : 'energy';
+        const oWeapon = opponentRobot ? getWeaponType(opponentRobot.parts) : 'energy';
 
-        // After short delay, show attacks
-        setTimeout(() => {
-            // Draw attack animations on canvas
-            this.animateRoundAttack(canvas, playerAttack, opponentAttack, playerDefense, opponentDefense, playerHit, opponentHit, weaponType, oppWeaponType, playerRobot, opponentRobot);
+        const roundNum = this.currentRound + 1;
+        const roundLabels = ['FIGHT!', 'ROUND 2', 'FINAL ROUND'];
 
-            // Show results
-            const yourResult = playerHit ? '💥 HIT!' : '🛡️ BLOCKED';
-            const theirResult = opponentHit ? '💥 HIT!' : '🛡️ BLOCKED';
+        // Phase 1: Announcer
+        display.innerHTML = `<div class="round-announcer">ROUND ${roundNum}</div><div class="round-sub">${roundLabels[this.currentRound] || ''}</div>`;
+        this.drawStance(canvas, playerRobot, opponentRobot);
+        await this.wait(1000);
 
-            if (playerHit) this.playerScore++;
-            if (opponentHit) this.opponentScore++;
+        // Phase 2: Reveal both choices as giant icons above robots
+        display.innerHTML = `
+            <div class="round-callout">
+                <span class="callout-you">You: ${RPS_ICON[playerMove]} ${RPS_LABEL[playerMove]}</span>
+                <span class="callout-them">Them: ${RPS_ICON[opponentMove]} ${RPS_LABEL[opponentMove]}</span>
+            </div>
+        `;
+        const revealStart = performance.now();
+        await new Promise(resolve => {
+            const tick = (now) => {
+                const p = Math.min(1, (now - revealStart) / 500);
+                this.drawRpsOverlay(canvas, playerMove, opponentMove, p);
+                if (p < 1) requestAnimationFrame(tick);
+                else resolve();
+            };
+            requestAnimationFrame(tick);
+        });
+        await this.wait(900);
 
-            document.getElementById('battle-player-score').textContent = this.playerScore;
-            document.getElementById('battle-opponent-score').textContent = this.opponentScore;
+        // Phase 3: Resolve
+        if (winnerSide === 'draw') {
+            display.innerHTML = `<div class="round-verdict"><div class="verdict-col blocked pop">⚖️ DRAW</div></div>`;
+            this.drawStance(canvas, playerRobot, opponentRobot);
+            await this.wait(1400);
+        } else {
+            // Winner's bot attacks, loser takes hit
+            const attackerSide = winnerSide;
+            const loserSide = attackerSide === 'player' ? 'opponent' : 'player';
+            const weapon = attackerSide === 'player' ? pWeapon : oWeapon;
+            const winMove = attackerSide === 'player' ? playerMove : opponentMove;
+            const loseMove = attackerSide === 'player' ? opponentMove : playerMove;
 
             display.innerHTML = `
-                <div class="round-label">Round ${this.currentRound + 1}</div>
-                <div class="round-attacks">
-                    <div class="round-attack-col">
-                        <div class="atk-label">Your ATK ${POSITION_ICONS[playerAttack]}</div>
-                        <div class="atk-result ${playerHit ? 'hit' : 'blocked'}">${yourResult}</div>
-                    </div>
-                    <div class="round-vs">vs</div>
-                    <div class="round-attack-col">
-                        <div class="atk-label">Their ATK ${POSITION_ICONS[opponentAttack]}</div>
-                        <div class="atk-result ${opponentHit ? 'hit' : 'blocked'}">${theirResult}</div>
-                    </div>
+                <div class="round-callout">
+                    <span class="${attackerSide === 'player' ? 'callout-you' : 'callout-them'}">
+                        ${RPS_ICON[winMove]} ${RPS_LABEL[winMove]} beats ${RPS_ICON[loseMove]} ${RPS_LABEL[loseMove]}!
+                    </span>
                 </div>
             `;
 
-            canvas.classList.add('shake');
-            setTimeout(() => canvas.classList.remove('shake'), 300);
+            // Strike animation
+            const sStart = performance.now();
+            const sDur = 600;
+            await new Promise(resolve => {
+                const tick = (now) => {
+                    const p = Math.min(1, (now - sStart) / sDur);
+                    this.drawStrike(canvas, attackerSide, weapon, p);
+                    if (p < 1) requestAnimationFrame(tick);
+                    else resolve();
+                };
+                requestAnimationFrame(tick);
+            });
 
-            this.currentRound++;
-            setTimeout(() => this.playNextRound(), 2500);
-        }, 1000);
+            // Impact
+            this.drawHit(canvas, loserSide);
+            canvas.classList.add('shake');
+            setTimeout(() => canvas.classList.remove('shake'), 350);
+
+            // Score update
+            if (attackerSide === 'player') {
+                this.playerScore++;
+                const ps = document.getElementById('battle-player-score');
+                ps.textContent = this.playerScore;
+                ps.classList.add('flash');
+                setTimeout(() => ps.classList.remove('flash'), 800);
+            } else {
+                this.opponentScore++;
+                const os = document.getElementById('battle-opponent-score');
+                os.textContent = this.opponentScore;
+                os.classList.add('flash');
+                setTimeout(() => os.classList.remove('flash'), 800);
+            }
+
+            const winLabel = attackerSide === 'player' ? 'YOU WIN THE ROUND!' : 'THEY WIN THE ROUND!';
+            display.innerHTML = `<div class="round-verdict"><div class="verdict-col ${attackerSide === 'player' ? 'blocked' : 'hit'} pop">${winLabel}</div></div>`;
+            await this.wait(1400);
+        }
+
+        this.currentRound++;
+        this.drawStance(canvas, playerRobot, opponentRobot);
+        await this.wait(250);
+        this.playNextRound();
     },
 
     animateRoundAttack(canvas, pAtk, oAtk, pDef, oDef, pHit, oHit, pWeapon, oWeapon, pRobot, oRobot) {
