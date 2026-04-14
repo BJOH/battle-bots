@@ -16,14 +16,14 @@
                 <h1 class="game-title">BATTLE<span>BOTS</span></h1>
                 <p class="subtitle">Build. Challenge. Destroy.</p>
                 <div class="auth-box">
-                    <div id="auth-form-signup">
+                    <div id="auth-form-signup" style="display:none">
                         <input type="text" id="auth-username" placeholder="Choose a username" maxlength="20" autocomplete="off">
                         <input type="email" id="auth-email" placeholder="Email" autocomplete="email">
                         <input type="password" id="auth-password" placeholder="Password" autocomplete="new-password">
                         <button class="btn btn-primary" onclick="Auth.signUp()">Sign Up</button>
                         <p class="auth-toggle">Already have an account? <a onclick="Auth.toggleForm()">Log in</a></p>
                     </div>
-                    <div id="auth-form-login" style="display:none">
+                    <div id="auth-form-login">
                         <input type="email" id="login-email" placeholder="Email" autocomplete="email">
                         <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
                         <button class="btn btn-primary" onclick="Auth.logIn()">Log In</button>
@@ -49,7 +49,7 @@
                     <button class="btn btn-primary" onclick="App.showScreen('workshop')">🔧 Workshop</button>
                     <button class="btn btn-accent" onclick="App.createChallenge()">⚔️ Create Challenge</button>
                     <button class="btn btn-secondary" onclick="PveBot.play()">🤖 Practice vs Bot</button>
-                    <button class="btn btn-secondary" onclick="App.showScreen('matches')">📋 My Matches</button>
+                    <button class="btn btn-secondary" onclick="App.showScreen('matches')">📋 My Matches <span class="menu-badge" id="menu-matches-badge" style="display:none"></span></button>
                     <button class="btn btn-secondary" onclick="App.showScreen('leaderboard')">🏆 Leaderboard</button>
                     <button class="btn btn-tertiary" onclick="Auth.logOut()">Log Out</button>
                 </div>
@@ -88,33 +88,31 @@
             </div>
         </div>
 
-        <!-- Choose Moves (Attack/Defense) -->
+        <!-- Choose Moves -->
         <div id="screen-choose" class="screen">
             <div class="choose-container">
-                <h2>Plan Your Strategy</h2>
+                <h2>New Challenge</h2>
+                <div class="opponent-picker">
+                    <label for="opponent-username" class="picker-label">Who are you challenging?</label>
+                    <input type="text" id="opponent-username" placeholder="Opponent's username" maxlength="20" autocomplete="off" spellcheck="false">
+                    <div class="h2h-record" id="choose-h2h-record"></div>
+                </div>
                 <p class="text-dim">Pick Rock, Paper, or Scissors for each of the 3 rounds.</p>
                 <div class="rounds-chooser" id="rounds-chooser"></div>
                 <button class="btn btn-primary btn-large" id="commit-btn" onclick="ChooseMoves.commit()" disabled>
-                    Lock In Strategy
+                    Send Challenge
                 </button>
+                <p id="choose-error" class="auth-error"></p>
             </div>
         </div>
 
-        <!-- Challenge Created -->
+        <!-- Challenge Sent -->
         <div id="screen-challenge-created" class="screen">
             <div class="centered-container">
-                <h2>Challenge Ready!</h2>
-                <p class="text-dim">Share this link with your opponent:</p>
-                <div class="share-link-box">
-                    <input type="text" id="share-link" readonly>
-                    <button class="btn btn-primary btn-small" onclick="App.copyLink()">Copy</button>
-                </div>
-                <p id="copy-feedback" class="copy-feedback"></p>
-                <div class="share-options">
-                    <button class="btn btn-secondary" onclick="App.shareByEmail()">📧 Send by Email</button>
-                </div>
-                <p class="text-dim" style="margin-top: 24px;">Waiting for opponent to accept...</p>
-                <button class="btn btn-tertiary" onclick="App.showScreen('menu')" style="margin-top: 12px;">Back to Menu</button>
+                <h2>Challenge Sent!</h2>
+                <p class="text-dim">Waiting for <span id="sent-to-name">your opponent</span> to accept…</p>
+                <p class="text-dim" style="margin-top:8px;font-size:0.85rem;">You'll see the result in <strong>My Matches</strong>.</p>
+                <button class="btn btn-primary" onclick="App.showScreen('menu')" style="margin-top: 24px;">Back to Menu</button>
             </div>
         </div>
 
@@ -126,9 +124,12 @@
                 <div class="h2h-record" id="h2h-record"></div>
                 <p class="text-dim">Pick Rock, Paper, or Scissors for each round:</p>
                 <div class="rounds-chooser" id="join-rounds-chooser"></div>
-                <button class="btn btn-accent btn-large" id="join-commit-btn" onclick="JoinMatch.commit()" disabled>
-                    ⚔️ Accept Challenge
-                </button>
+                <div class="join-action-row">
+                    <button class="btn btn-accent btn-large" id="join-commit-btn" onclick="JoinMatch.commit()" disabled>
+                        ⚔️ Accept Challenge
+                    </button>
+                    <button class="btn btn-tertiary" onclick="JoinMatch.decline()">Decline</button>
+                </div>
             </div>
         </div>
 
@@ -137,6 +138,20 @@
             <div class="screen-header">
                 <button class="btn-back" onclick="App.showScreen('menu')">← Back</button>
                 <h2>My Matches</h2>
+            </div>
+            <div class="match-tabs">
+                <button class="match-tab active" data-tab="incoming" onclick="MatchesList.switchTab('incoming')">
+                    Incoming <span class="tab-count" id="tab-count-incoming"></span>
+                </button>
+                <button class="match-tab" data-tab="results" onclick="MatchesList.switchTab('results')">
+                    New Results <span class="tab-count" id="tab-count-results"></span>
+                </button>
+                <button class="match-tab" data-tab="outgoing" onclick="MatchesList.switchTab('outgoing')">
+                    Outgoing <span class="tab-count" id="tab-count-outgoing"></span>
+                </button>
+                <button class="match-tab" data-tab="past" onclick="MatchesList.switchTab('past')">
+                    Past
+                </button>
             </div>
             <div id="matches-list" class="matches-list"></div>
         </div>
@@ -179,6 +194,7 @@
             <div class="finisher-overlay" id="finisher-overlay">
                 <h1 class="finisher-text" id="finisher-text">DESTROYED</h1>
                 <div class="finisher-winner" id="finisher-winner"></div>
+                <div class="finisher-h2h" id="finisher-h2h"></div>
                 <div class="finisher-buttons" id="finisher-buttons">
                     <button class="btn btn-primary" onclick="App.showScreen('menu')">Main Menu</button>
                     <button class="btn btn-accent" onclick="BattlePlayback.replay()">Watch Again</button>

@@ -759,3 +759,146 @@ body {
     .part-categories { padding: 8px 12px 0; }
     .part-tab { padding: 6px 10px; font-size: 0.8rem; }
 }
+
+/* ---- Opponent picker (new challenge) ---- */
+.opponent-picker {
+    width: 100%;
+    margin: 12px 0 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.picker-label {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+#opponent-username {
+    width: 100%;
+    padding: 12px 16px;
+    background: var(--bg-card);
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    color: var(--text);
+    font-size: 1rem;
+    font-weight: 600;
+}
+#opponent-username:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ---- Match tabs ---- */
+.match-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px 0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.match-tab {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: var(--text-dim);
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.match-tab.active {
+    background: var(--bg-card-hover);
+    color: var(--accent);
+    border-color: var(--accent);
+}
+.tab-count {
+    display: inline-block;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    margin-left: 4px;
+    background: var(--accent-secondary);
+    color: #000;
+    border-radius: 9px;
+    font-size: 0.7rem;
+    line-height: 18px;
+    font-weight: 900;
+    vertical-align: middle;
+}
+.tab-count:empty { display: none; }
+
+.match-card.incoming { border-color: var(--accent-secondary); }
+.match-card .match-status.incoming { color: var(--accent-secondary); }
+.match-card .match-status.declined { color: var(--text-dim); }
+.match-card .match-status.won { color: var(--success); }
+.match-card .match-status.lost { color: #ff3d57; }
+.match-card .match-status.draw { color: var(--text-dim); }
+
+/* ---- Menu badge ---- */
+.menu-badge {
+    display: inline-block;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    margin-left: 6px;
+    background: var(--accent-secondary);
+    color: #000;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    line-height: 20px;
+    font-weight: 900;
+    vertical-align: middle;
+}
+
+/* ---- Toast ---- */
+.toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-120%);
+    background: var(--bg-card-hover);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    font-weight: 700;
+    font-size: 0.9rem;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.25s ease, transform 0.3s cubic-bezier(.2,.9,.2,1);
+    max-width: 90vw;
+    text-align: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+}
+.toast.visible {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
+.toast.success { border-color: var(--success); }
+.toast.accent { border-color: var(--accent-secondary); }
+
+/* ---- Join action row ---- */
+.join-action-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+    align-items: center;
+}
+.join-action-row .btn { width: 100%; max-width: 360px; }
+
+/* ---- Finisher H2H ---- */
+.finisher-h2h {
+    margin-top: 12px;
+    color: var(--text-dim);
+    font-size: 1rem;
+}
+.finisher-h2h .h2h-text { font-size: 1.1rem; }
+.finisher-text.draw { color: var(--text); text-shadow: 0 0 20px var(--text); }

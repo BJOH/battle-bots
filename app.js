@@ -17,7 +17,7 @@ const State = {
 
 // ---- Auth ----
 const Auth = {
-    showingSignup: true,
+    showingSignup: false,
 
     async init() {
         const { data: { session } } = await sb.auth.getSession();
@@ -107,6 +107,9 @@ const Auth = {
     },
 
     routeAfterAuth() {
+        // Subscribe to realtime updates once per session
+        Notifications.subscribe();
+
         // If no robot built yet, force workshop
         if (!State.robot) {
             State.isNewUser = true;
@@ -126,13 +129,89 @@ const Auth = {
     }
 };
 
+// ---- Realtime notifications ----
+const Notifications = {
+    channel: null,
+
+    subscribe() {
+        if (this.channel) return;
+        this.channel = sb.channel('match-updates-' + State.user.id)
+            .on('postgres_changes', {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'matches',
+                filter: `challenger_id=eq.${State.user.id}`,
+            }, (payload) => this.onMyChallengeUpdated(payload.new))
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'matches',
+                filter: `target_opponent_id=eq.${State.user.id}`,
+            }, (payload) => this.onIncomingChallenge(payload.new))
+            .subscribe();
+    },
+
+    onMyChallengeUpdated(match) {
+        if (match.status === 'complete') {
+            Toast.show(`⚡ Your challenge was accepted — new result waiting!`, 'success');
+            this.refreshMenuBadges();
+        } else if (match.status === 'declined') {
+            Toast.show(`Your challenge was declined.`, 'info');
+        }
+    },
+
+    onIncomingChallenge(match) {
+        Toast.show(`⚔️ New incoming challenge!`, 'accent');
+        this.refreshMenuBadges();
+    },
+
+    async refreshMenuBadges() {
+        // Count incoming + new results for menu badge
+        const { data } = await sb.from('matches')
+            .select('id, status, challenger_id, challenger_viewed_at, opponent_viewed_at, target_opponent_id, winner_id')
+            .or(`challenger_id.eq.${State.user.id},target_opponent_id.eq.${State.user.id}`);
+        let incoming = 0, results = 0;
+        for (const m of (data || [])) {
+            const iAmChallenger = m.challenger_id === State.user.id;
+            if (m.status === 'waiting' && !iAmChallenger) incoming++;
+            else if (m.status === 'complete') {
+                const viewed = iAmChallenger ? m.challenger_viewed_at : m.opponent_viewed_at;
+                if (!viewed) results++;
+            }
+        }
+        const badge = document.getElementById('menu-matches-badge');
+        if (badge) {
+            const total = incoming + results;
+            badge.textContent = total > 0 ? total : '';
+            badge.style.display = total > 0 ? '' : 'none';
+        }
+    }
+};
+
+// ---- Toast ----
+const Toast = {
+    show(msg, variant = 'info') {
+        let el = document.getElementById('toast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'toast';
+            el.className = 'toast';
+            document.body.appendChild(el);
+        }
+        el.textContent = msg;
+        el.className = `toast visible ${variant}`;
+        clearTimeout(this._t);
+        this._t = setTimeout(() => { el.className = 'toast'; }, 4000);
+    }
+};
+
 // ---- App ----
 const App = {
     showScreen(screenId) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(`screen-${screenId}`).classList.add('active');
 
-        if (screenId === 'menu') this.refreshMenu();
+        if (screenId === 'menu') { this.refreshMenu(); Notifications.refreshMenuBadges(); }
         if (screenId === 'workshop') Workshop.init();
         if (screenId === 'matches') MatchesList.load();
         if (screenId === 'leaderboard') Leaderboard.load();
@@ -159,24 +238,6 @@ const App = {
             return;
         }
         ChooseMoves.start();
-    },
-
-    copyLink() {
-        const input = document.getElementById('share-link');
-        input.select();
-        navigator.clipboard.writeText(input.value).then(() => {
-            document.getElementById('copy-feedback').textContent = 'Copied!';
-            setTimeout(() => document.getElementById('copy-feedback').textContent = '', 2000);
-        }).catch(() => {
-            document.getElementById('copy-feedback').textContent = 'Tap and hold to copy';
-        });
-    },
-
-    shareByEmail() {
-        const link = document.getElementById('share-link').value;
-        const subject = encodeURIComponent(`${State.profile.username} challenged you to Battle Bots!`);
-        const body = encodeURIComponent(`I'm challenging you to a robot battle!\n\nClick here to fight: ${link}\n\nBuild your robot and choose your strategy. Let's see who wins!`);
-        window.open(`mailto:?subject=${subject}&body=${body}`);
     },
 
     escapeHtml(str) {
@@ -414,16 +475,84 @@ function buildRoundsUI(containerId, prefix) {
     `).join('');
 }
 
+// ---- Shared helpers ----
+async function fetchProfileByUsername(username) {
+    const { data } = await sb.from('profiles')
+        .select('id, username, wins, losses')
+        .ilike('username', username)
+        .maybeSingle();
+    return data;
+}
+
+async function fetchH2H(opponentId) {
+    const { data } = await sb.from('matches')
+        .select('winner_id')
+        .eq('status', 'complete')
+        .or(`and(challenger_id.eq.${State.user.id},opponent_id.eq.${opponentId}),and(challenger_id.eq.${opponentId},opponent_id.eq.${State.user.id})`);
+    let myWins = 0, theirWins = 0, draws = 0;
+    for (const m of (data || [])) {
+        if (m.winner_id === State.user.id) myWins++;
+        else if (m.winner_id === null) draws++;
+        else theirWins++;
+    }
+    return { myWins, theirWins, draws, total: (data || []).length };
+}
+
+function renderH2H(el, stats, opponentName) {
+    if (!stats.total) {
+        el.innerHTML = `<p class="text-dim">First match against ${App.escapeHtml(opponentName || 'this opponent')}!</p>`;
+        return;
+    }
+    el.innerHTML = `
+        <p class="h2h-text">vs ${App.escapeHtml(opponentName || 'opponent')}:
+            <span class="h2h-wins">${stats.myWins}W</span> -
+            <span class="h2h-draws">${stats.draws}D</span> -
+            <span class="h2h-losses">${stats.theirWins}L</span>
+        </p>`;
+}
+
 // ---- Choose Moves (Create Challenge) ----
 const ChooseMoves = {
     choices: [null, null, null],
+    targetProfile: null,
+    h2hDebounce: null,
 
     start() {
         this.choices = [null, null, null];
+        this.targetProfile = null;
         buildRoundsUI('rounds-chooser', 'ChooseMoves');
         document.getElementById('commit-btn').disabled = true;
-        document.getElementById('commit-btn').textContent = 'Lock In Strategy';
+        document.getElementById('commit-btn').textContent = 'Send Challenge';
+        document.getElementById('choose-error').textContent = '';
+        const input = document.getElementById('opponent-username');
+        input.value = '';
+        input.oninput = () => this.onUsernameChange();
+        document.getElementById('choose-h2h-record').innerHTML = '';
         App.showScreen('choose');
+    },
+
+    onUsernameChange() {
+        this.targetProfile = null;
+        this.updateCommitState();
+        const name = document.getElementById('opponent-username').value.trim();
+        document.getElementById('choose-h2h-record').innerHTML = '';
+        if (this.h2hDebounce) clearTimeout(this.h2hDebounce);
+        if (!name || name.length < 2) return;
+        this.h2hDebounce = setTimeout(async () => {
+            const profile = await fetchProfileByUsername(name);
+            if (!profile) {
+                document.getElementById('choose-h2h-record').innerHTML = `<p class="text-dim">No player named "${App.escapeHtml(name)}".</p>`;
+                return;
+            }
+            if (profile.id === State.user.id) {
+                document.getElementById('choose-h2h-record').innerHTML = `<p class="text-dim">You can't challenge yourself.</p>`;
+                return;
+            }
+            this.targetProfile = profile;
+            const stats = await fetchH2H(profile.id);
+            renderH2H(document.getElementById('choose-h2h-record'), stats, profile.username);
+            this.updateCommitState();
+        }, 400);
     },
 
     pick(round, move, btn) {
@@ -431,27 +560,36 @@ const ChooseMoves = {
         const siblings = btn.parentElement.querySelectorAll('.rps-btn');
         siblings.forEach(b => b.classList.remove('selected'));
         btn.classList.add('selected');
+        this.updateCommitState();
+    },
+
+    updateCommitState() {
         const allChosen = this.choices.every(c => c !== null);
-        document.getElementById('commit-btn').disabled = !allChosen;
+        document.getElementById('commit-btn').disabled = !(allChosen && this.targetProfile);
     },
 
     async commit() {
+        if (!this.targetProfile) return;
         const btn = document.getElementById('commit-btn');
+        const errEl = document.getElementById('choose-error');
         btn.disabled = true;
-        btn.textContent = 'Creating challenge...';
+        btn.textContent = 'Sending...';
+        errEl.textContent = '';
 
         const { data, error } = await sb.from('matches').insert({
             challenger_id: State.user.id,
             challenger_robot: State.robot,
-            challenger_choices: this.choices
+            challenger_choices: this.choices,
+            target_opponent_id: this.targetProfile.id
         }).select().single();
 
-        if (error) { btn.textContent = 'Error: ' + error.message; return; }
-        btn.textContent = 'Lock In Strategy';
-
-        const baseUrl = window.location.origin + window.location.pathname;
-        document.getElementById('share-link').value = `${baseUrl}#/match/${data.id}`;
-        document.getElementById('copy-feedback').textContent = '';
+        if (error) {
+            errEl.textContent = 'Error: ' + error.message;
+            btn.disabled = false;
+            btn.textContent = 'Send Challenge';
+            return;
+        }
+        document.getElementById('sent-to-name').textContent = this.targetProfile.username;
         App.showScreen('challenge-created');
     }
 };
@@ -473,10 +611,21 @@ const JoinMatch = {
             return;
         }
 
+        if (data.status === 'declined') {
+            alert('This challenge was declined.');
+            App.showScreen('menu');
+            return;
+        }
+
         if (data.challenger_id === State.user.id) {
-            const baseUrl = window.location.origin + window.location.pathname;
-            document.getElementById('share-link').value = `${baseUrl}#/match/${matchId}`;
-            App.showScreen('challenge-created');
+            alert('This is your own challenge. Waiting for your opponent.');
+            App.showScreen('menu');
+            return;
+        }
+
+        if (data.target_opponent_id !== State.user.id) {
+            alert("This challenge isn't for you.");
+            App.showScreen('menu');
             return;
         }
 
@@ -489,7 +638,6 @@ const JoinMatch = {
         this.matchData = data;
         this.choices = [null, null, null];
 
-        // Show challenger info
         const belt = getBelt(data.challenger?.wins || 0);
         document.getElementById('challenger-info').innerHTML = `
             <canvas id="challenger-robot-preview" width="80" height="90"></canvas>
@@ -507,8 +655,8 @@ const JoinMatch = {
             }
         });
 
-        // Head-to-head record
-        await this.loadH2H(data.challenger_id);
+        const stats = await fetchH2H(data.challenger_id);
+        renderH2H(document.getElementById('h2h-record'), stats, data.challenger?.username);
 
         buildRoundsUI('join-rounds-chooser', 'JoinMatch');
         document.getElementById('join-commit-btn').disabled = true;
@@ -516,25 +664,11 @@ const JoinMatch = {
         App.showScreen('join');
     },
 
-    async loadH2H(opponentId) {
-        const el = document.getElementById('h2h-record');
-        const { data } = await sb.from('matches')
-            .select('winner_id')
-            .eq('status', 'complete')
-            .or(`and(challenger_id.eq.${State.user.id},opponent_id.eq.${opponentId}),and(challenger_id.eq.${opponentId},opponent_id.eq.${State.user.id})`);
-
-        if (!data || data.length === 0) {
-            el.innerHTML = '<p class="text-dim">First match against this opponent!</p>';
-            return;
-        }
-
-        let myWins = 0, theirWins = 0, draws = 0;
-        for (const m of data) {
-            if (m.winner_id === State.user.id) myWins++;
-            else if (m.winner_id === null) draws++;
-            else theirWins++;
-        }
-        el.innerHTML = `<p class="h2h-text">Head-to-head: <span class="h2h-wins">${myWins}W</span> - <span class="h2h-draws">${draws}D</span> - <span class="h2h-losses">${theirWins}L</span></p>`;
+    async decline() {
+        if (!confirm('Decline this challenge?')) return;
+        const { error } = await sb.rpc('decline_match', { p_match_id: this.matchData.id });
+        if (error) { alert('Error: ' + error.message); return; }
+        App.showScreen('matches');
     },
 
     pick(round, move, btn) {
@@ -573,57 +707,142 @@ const JoinMatch = {
 
 // ---- Matches List ----
 const MatchesList = {
+    currentTab: 'incoming',
+    cache: null,
+
     async load() {
+        this.currentTab = 'incoming';
+        document.querySelectorAll('.match-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'incoming'));
         const list = document.getElementById('matches-list');
         list.innerHTML = '<p class="text-dim" style="padding:40px">Loading...</p>';
 
-        const { data } = await sb.from('matches')
-            .select('*, challenger:profiles!challenger_id(username), opponent:profiles!opponent_id(username)')
-            .or(`challenger_id.eq.${State.user.id},opponent_id.eq.${State.user.id}`)
-            .order('created_at', { ascending: false }).limit(30);
+        const { data, error } = await sb.from('matches')
+            .select('*, challenger:profiles!challenger_id(username, wins), target:profiles!target_opponent_id(username, wins)')
+            .or(`challenger_id.eq.${State.user.id},target_opponent_id.eq.${State.user.id}`)
+            .order('created_at', { ascending: false }).limit(100);
 
-        if (!data || data.length === 0) {
-            list.innerHTML = '<p class="text-dim" style="padding:40px">No matches yet. Create a challenge!</p>';
+        if (error) {
+            list.innerHTML = `<p class="text-dim" style="padding:40px">Error loading matches: ${App.escapeHtml(error.message)}</p>`;
             return;
         }
 
-        list.innerHTML = data.map(match => {
-            const isChallenger = match.challenger_id === State.user.id;
-            const opponentName = isChallenger
-                ? (match.opponent?.username || 'Waiting...')
+        this.cache = data || [];
+        this.updateCounts();
+        this.render();
+    },
+
+    bucketOf(match) {
+        const iAmChallenger = match.challenger_id === State.user.id;
+        if (match.status === 'waiting') {
+            return iAmChallenger ? 'outgoing' : 'incoming';
+        }
+        if (match.status === 'declined') {
+            return 'past';
+        }
+        // complete
+        const myViewedAt = iAmChallenger ? match.challenger_viewed_at : match.opponent_viewed_at;
+        return myViewedAt ? 'past' : 'results';
+    },
+
+    updateCounts() {
+        const counts = { incoming: 0, outgoing: 0, results: 0, past: 0 };
+        for (const m of this.cache) counts[this.bucketOf(m)]++;
+        for (const k of Object.keys(counts)) {
+            const el = document.getElementById(`tab-count-${k}`);
+            if (!el) continue;
+            el.textContent = counts[k] > 0 ? counts[k] : '';
+        }
+    },
+
+    switchTab(tab) {
+        this.currentTab = tab;
+        document.querySelectorAll('.match-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+        this.render();
+    },
+
+    render() {
+        const list = document.getElementById('matches-list');
+        const filtered = (this.cache || []).filter(m => this.bucketOf(m) === this.currentTab);
+
+        if (filtered.length === 0) {
+            const emptyMsg = {
+                incoming: 'No incoming challenges.',
+                outgoing: "You haven't sent any challenges that are still waiting.",
+                results: 'No new match results to watch.',
+                past: 'No past matches yet.',
+            }[this.currentTab];
+            list.innerHTML = `<p class="text-dim" style="padding:40px">${emptyMsg}</p>`;
+            return;
+        }
+
+        list.innerHTML = filtered.map(match => {
+            const iAmChallenger = match.challenger_id === State.user.id;
+            const otherName = iAmChallenger
+                ? (match.target?.username || 'Unknown')
                 : (match.challenger?.username || 'Unknown');
 
-            let statusClass, statusText;
-            if (match.status === 'waiting') {
+            let statusClass, statusText, extra = '';
+            if (match.status === 'waiting' && !iAmChallenger) {
+                statusClass = 'incoming';
+                statusText = 'Incoming challenge — tap to respond';
+            } else if (match.status === 'waiting' && iAmChallenger) {
                 statusClass = 'waiting';
-                statusText = 'Waiting for opponent';
+                statusText = 'Waiting for them to accept…';
+            } else if (match.status === 'declined') {
+                statusClass = 'declined';
+                statusText = 'Challenge declined';
             } else {
-                // Don't spoil the result — say "Watch match" instead
-                statusClass = 'ready';
-                statusText = 'Match ready — watch now!';
+                const myViewedAt = iAmChallenger ? match.challenger_viewed_at : match.opponent_viewed_at;
+                if (!myViewedAt) {
+                    statusClass = 'ready';
+                    statusText = '⚡ New result — watch now!';
+                } else {
+                    const won = match.winner_id === State.user.id;
+                    const draw = match.winner_id === null;
+                    statusClass = draw ? 'draw' : (won ? 'won' : 'lost');
+                    statusText = draw ? 'Draw' : (won ? 'Victory' : 'Defeat');
+                }
             }
 
             return `
-                <div class="match-card" onclick="MatchesList.viewMatch('${match.id}')">
-                    <h3>vs ${App.escapeHtml(opponentName)}</h3>
+                <div class="match-card ${statusClass}" onclick="MatchesList.openMatch('${match.id}')">
+                    <h3>vs ${App.escapeHtml(otherName)}</h3>
                     <div class="match-status ${statusClass}">${statusText}</div>
+                    ${extra}
                 </div>
             `;
         }).join('');
     },
 
-    async viewMatch(matchId) {
+    async openMatch(matchId) {
+        const match = this.cache.find(m => m.id === matchId);
+        if (!match) return;
+        const iAmChallenger = match.challenger_id === State.user.id;
+
+        if (match.status === 'waiting' && !iAmChallenger) {
+            // Incoming — go to join screen
+            JoinMatch.load(matchId);
+            return;
+        }
+        if (match.status === 'waiting' && iAmChallenger) {
+            alert('Still waiting for your opponent to respond.');
+            return;
+        }
+        if (match.status === 'declined') {
+            alert('This challenge was declined.');
+            return;
+        }
+        // Completed — load fully and play
         const { data } = await sb.from('matches')
             .select('*, challenger:profiles!challenger_id(username, wins), opponent:profiles!opponent_id(username, wins)')
             .eq('id', matchId).single();
-
-        if (data && data.status === 'complete') {
-            BattlePlayback.playMatch(data);
-        } else if (data && data.status === 'waiting') {
-            const baseUrl = window.location.origin + window.location.pathname;
-            document.getElementById('share-link').value = `${baseUrl}#/match/${matchId}`;
-            App.showScreen('challenge-created');
-        }
+        if (!data) return;
+        // Mark viewed
+        sb.rpc('mark_match_viewed', { p_match_id: matchId }).then(() => {});
+        // Update cache locally so tab counts reflect immediately on return
+        if (iAmChallenger) match.challenger_viewed_at = new Date().toISOString();
+        else match.opponent_viewed_at = new Date().toISOString();
+        BattlePlayback.playMatch(data);
     }
 };
 
@@ -1262,11 +1481,12 @@ const BattlePlayback = {
         ctx.restore();
     },
 
-    showFinisher() {
+    async showFinisher() {
         const playerRobot = this.isChallenger ? this.matchData.challenger_robot : this.matchData.opponent_robot;
         const opponentRobot = this.isChallenger ? this.matchData.opponent_robot : this.matchData.challenger_robot;
         const playerName = this.isChallenger ? this.matchData.challenger?.username : this.matchData.opponent?.username;
         const opponentName = this.isChallenger ? this.matchData.opponent?.username : this.matchData.challenger?.username;
+        const opponentId = this.isChallenger ? this.matchData.opponent_id : this.matchData.challenger_id;
 
         const won = this.playerScore > this.opponentScore;
         const draw = this.playerScore === this.opponentScore;
@@ -1276,6 +1496,11 @@ const BattlePlayback = {
         const overlay = document.getElementById('finisher-overlay');
         const text = document.getElementById('finisher-text');
         const winner = document.getElementById('finisher-winner');
+        const h2hEl = document.getElementById('finisher-h2h');
+        h2hEl.innerHTML = '';
+        if (opponentId && State.user) {
+            fetchH2H(opponentId).then(stats => renderH2H(h2hEl, stats, opponentName));
+        }
 
         if (draw) {
             Finisher.playDraw(playerRobot.parts, opponentRobot.parts,
